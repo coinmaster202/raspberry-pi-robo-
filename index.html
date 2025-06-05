@@ -83,6 +83,19 @@
       const unlockInput = document.getElementById('unlock-code');
       const sirenAudio = document.getElementById('siren');
 
+      const profanityList = [
+        "tits","bitch","fuck","shit","dick","cunt","asshole","nigger","fag","slut","whore","bastard",
+        "cock","pussy","bollocks","twat","wanker","cum","suck","motherfucker","shithead","douche","arse",
+        "fucker","cocksucker","dildo","fisting","jerkoff","skank","splooge","tit","nigga","porn","rapist",
+        "molest","anal","buttsex","faggy","rimjob","tranny","queer","dyke","clit","hump","blowjob",
+        "boob","vagina","penis","hentai","orgasm","pegging","cameltoe","jackoff","jizz","kinky","masturbate",
+        "milf","nudes","orgy","panties","pedophile","pervert","piss","raunchy","rape","screwing","semen",
+        "sex","sodomize","stripper","teabag","threesome","urinate","vibrator","xxx","zoophile","ejaculate",
+        "nipple","handjob","spank","fetish","hooker","gangbang","hardcore","incest","lapdance","lust",
+        "necrophilia","nudity","obscene","pimp","prostitute","redtube","sensual","strip","thrust","vulgar",
+        "wetdream","xrated","yank","zebra porn" // example filler list (can be extended)
+      ];
+
       let currentState = null;
       let userName = "";
       let asked = new Set();
@@ -126,6 +139,10 @@
         await speak("Enter unlock code to continue.");
         downloadLog();
         unlockInput.focus();
+      }
+
+      function isProfane(input) {
+        return profanityList.some(word => input.includes(word));
       }
 
       function submitUnlock() {
@@ -186,6 +203,11 @@
         consoleEl.innerHTML += `You: ${input}\n`;
         inputArea.style.display = 'none';
 
+        if (isProfane(input)) {
+          await triggerLockdown(input);
+          return;
+        }
+
         switch (currentState) {
           case "menu":
             if (!availableOptions.includes(input) || asked.has(input)) {
@@ -202,12 +224,14 @@
             break;
 
           case "getName":
+            if (isProfane(input)) return await triggerLockdown(input);
             userName = input;
             await speak(`Nice to meet you, ${userName}`);
             showMenu();
             break;
 
           case "getMood":
+            if (isProfane(input)) return await triggerLockdown(input);
             await speak("Thanks for sharing that with me.");
             showMenu();
             break;
