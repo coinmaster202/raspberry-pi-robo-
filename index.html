@@ -36,6 +36,14 @@
       padding-top: 20%;
       font-size: 24px;
     }
+    #unlock-form {
+      margin-top: 20px;
+    }
+    #unlock-code {
+      padding: 10px;
+      font-size: 18px;
+      width: 200px;
+    }
   </style>
 </head>
 <body>
@@ -46,7 +54,14 @@
     <input id="user-input" type="text" placeholder="Type your response...">
     <button onclick="handleInput()">Submit</button>
   </div>
-  <div id="overlay">🚨 Terminal Locked 🚨<br>Awaiting authorized member to unlock with code 2026.</div>
+  <div id="overlay">
+    🚨 Terminal Locked 🚨<br>
+    Awaiting authorized member to unlock.<br>
+    <div id="unlock-form">
+      <input id="unlock-code" type="password" placeholder="Enter unlock code">
+      <button onclick="submitUnlockCode()">Unlock</button>
+    </div>
+  </div>
   <audio id="siren" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
   <a id="log-download" style="display:none;"></a>
 
@@ -57,6 +72,7 @@
     const overlay = document.getElementById('overlay');
     const logDownload = document.getElementById('log-download');
     const siren = document.getElementById('siren');
+    const unlockInput = document.getElementById('unlock-code');
 
     let currentState = null;
     let asked = new Set();
@@ -115,19 +131,6 @@
         return;
       }
 
-      if (locked) {
-        if (currentState === "unlock" && input === UNLOCK_CODE) {
-          locked = false;
-          overlay.style.display = "none";
-          logDownload.style.display = "none";
-          await speak("✅ Terminal unlocked.");
-          return startInteraction();
-        } else {
-          await speak("❌ Invalid unlock code.");
-          return listen("unlock");
-        }
-      }
-
       switch (currentState) {
         case "menu":
           if (input === "1") {
@@ -173,7 +176,19 @@
       await speak("All further interaction has been blocked due to the use of an inappropriate word.");
       await speak("Please stand by and ask an authorized member to unlock the terminal.");
       downloadLog();
-      listen("unlock");
+    }
+
+    function submitUnlockCode() {
+      const code = unlockInput.value.trim();
+      if (code === UNLOCK_CODE) {
+        locked = false;
+        overlay.style.display = "none";
+        logDownload.style.display = 'none';
+        speak("✅ Terminal unlocked.");
+        startInteraction();
+      } else {
+        speak("❌ Invalid unlock code.");
+      }
     }
 
     function downloadLog() {
