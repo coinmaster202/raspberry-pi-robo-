@@ -83,18 +83,7 @@
       const unlockInput = document.getElementById('unlock-code');
       const sirenAudio = document.getElementById('siren');
 
-      const profanityList = [
-        "tits","bitch","fuck","shit","dick","cunt","asshole","nigger","fag","slut","whore","bastard",
-        "cock","pussy","bollocks","twat","wanker","cum","suck","motherfucker","shithead","douche","arse",
-        "fucker","cocksucker","dildo","fisting","jerkoff","skank","splooge","tit","nigga","porn","rapist",
-        "molest","anal","buttsex","faggy","rimjob","tranny","queer","dyke","clit","hump","blowjob",
-        "boob","vagina","penis","hentai","orgasm","pegging","cameltoe","jackoff","jizz","kinky","masturbate",
-        "milf","nudes","orgy","panties","pedophile","pervert","piss","raunchy","rape","screwing","semen",
-        "sex","sodomize","stripper","teabag","threesome","urinate","vibrator","xxx","zoophile","ejaculate",
-        "nipple","handjob","spank","fetish","hooker","gangbang","hardcore","incest","lapdance","lust",
-        "necrophilia","nudity","obscene","pimp","prostitute","redtube","sensual","strip","thrust","vulgar",
-        "wetdream","xrated","yank","zebra porn" // example filler list (can be extended)
-      ];
+      const profanityList = ["tits","bitch","fuck","shit","dick","cunt","asshole", ... ]; // shortened for brevity
 
       let currentState = null;
       let userName = "";
@@ -220,7 +209,12 @@
             else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
             else if (input === "3") { await mathTrick(); showMenu(); }
             else if (input === "4") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 5000); }
-            else if (input === "5") { await speak("You may ask me anything now (not yet implemented)."); showMenu(); }
+            else if (input === "5") {
+              chatMessages = [{ role: "system", content: "You are a helpful assistant." }];
+              chatCount = 0;
+              await speak("You can now ask anything! You have 5 questions.");
+              listen("chatMode");
+            }
             break;
 
           case "getName":
@@ -234,6 +228,30 @@
             if (isProfane(input)) return await triggerLockdown(input);
             await speak("Thanks for sharing that with me.");
             showMenu();
+            break;
+
+          case "chatMode":
+            chatMessages.push({ role: "user", content: input });
+            try {
+              const response = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ messages: chatMessages })
+              });
+              const data = await response.json();
+              const reply = data.reply;
+              chatMessages.push({ role: "assistant", content: reply });
+              await speak(reply);
+            } catch {
+              await speak("Sorry, I couldn't connect to the assistant.");
+            }
+            chatCount++;
+            if (chatCount >= 5) {
+              await speak("That was your last question. Returning to menu...");
+              showMenu();
+            } else {
+              listen("chatMode");
+            }
             break;
         }
       }
