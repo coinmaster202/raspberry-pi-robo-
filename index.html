@@ -139,7 +139,7 @@
           return data.result === "blocked";
         } catch (err) {
           console.error("Profanity check failed:", err);
-          return false; // default to safe if error
+          return false;
         }
       }
 
@@ -201,9 +201,12 @@
         consoleEl.innerHTML += `You: ${input}\n`;
         inputArea.style.display = 'none';
 
-        if (await isProfane(input)) {
-          await triggerLockdown(input);
-          return;
+        if (currentState !== "menu") {
+          await speak("🛡️ Scanning input for safety...");
+          if (await isProfane(input)) {
+            await triggerLockdown(input);
+            return;
+          }
         }
 
         switch (currentState) {
@@ -227,14 +230,12 @@
             break;
 
           case "getName":
-            if (await isProfane(input)) return await triggerLockdown(input);
             userName = input;
             await speak(`Nice to meet you, ${userName}`);
             showMenu();
             break;
 
           case "getMood":
-            if (await isProfane(input)) return await triggerLockdown(input);
             await speak("Thanks for sharing that with me.");
             showMenu();
             break;
