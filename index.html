@@ -181,9 +181,53 @@
         listen("menu");
       }
 
-      function handleInput() {
-        speak("You entered: " + userInput.value);
-        // Add your input handling logic here...
+      async function handleInput() {
+        const input = userInput.value.trim().toLowerCase();
+        consoleEl.innerHTML += `You: ${input}\n`;
+        inputArea.style.display = 'none';
+
+        switch (currentState) {
+          case "menu":
+            if (!availableOptions.includes(input) || asked.has(input)) {
+              await speak("That option is not available or already used.");
+              showMenu();
+              return;
+            }
+            asked.add(input);
+            if (input === "1") { await speak("What is your name?"); listen("getName"); }
+            else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
+            else if (input === "3") { await mathTrick(); showMenu(); }
+            else if (input === "4") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 5000); }
+            else if (input === "5") { await speak("You may ask me anything now (not yet implemented)."); showMenu(); }
+            break;
+
+          case "getName":
+            userName = input;
+            await speak(`Nice to meet you, ${userName}`);
+            showMenu();
+            break;
+
+          case "getMood":
+            await speak("Thanks for sharing that with me.");
+            showMenu();
+            break;
+        }
+      }
+
+      async function mathTrick() {
+        await speak("Let's do a fun mind trick.");
+        await delay(1000);
+        await speak("Think of a number.");
+        await delay(1300);
+        await speak("Double it.");
+        await delay(1300);
+        await speak("Add 10.");
+        await delay(1300);
+        await speak("Divide by 2.");
+        await delay(1300);
+        await speak("Subtract your original number.");
+        await delay(1600);
+        await speak("The answer is... 5! 😄");
       }
 
       window.startInteraction = startInteraction;
