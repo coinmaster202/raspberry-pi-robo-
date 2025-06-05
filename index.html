@@ -218,13 +218,13 @@
           if (input === "1") { await speak("What is your name?"); listen("getName"); }
           else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
           else if (input === "3") { await mathTrick(); await speak("Returning to menu..."); showMenu(); }
-          else if (input === "5") {
+          else if (input === "4") {
             chatMessages = [];
             chatCount = 0;
             await speak("You can now ask anything! You have 5 questions this session.");
             listen("chatMode");
           }
-          else if (input === "4") {
+          else if (input === "5") {
             await speak("Goodbye! Restarting soon...");
             setTimeout(startInteraction, 5000);
           }
