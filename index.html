@@ -187,12 +187,11 @@
         }
         await speak("Please choose one of the following options:");
         for (const opt of remaining) {
-  if (opt === "1") await speak("1. What is your name?");
-  if (opt === "2") await speak("2. How are you?");
-  if (opt === "3") await speak("3. Try a math trick");
-  if (opt === "4") await speak("4. Ask anything (ChatGPT mode)");
-  if (opt === "5") await speak("5. Exit");
-}
+          if (opt === "1") await speak("1. What is your name?");
+          if (opt === "2") await speak("2. How are you?");
+          if (opt === "3") await speak("3. Try a math trick");
+          if (opt === "4") await speak("4. Ask anything (ChatGPT mode)");
+          if (opt === "5") await speak("5. Exit");
         }
         listen("menu");
       }
@@ -221,13 +220,8 @@
             if (input === "1") { await speak("What is your name?"); listen("getName"); }
             else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
             else if (input === "3") { await mathTrick(); showMenu(); }
-            else if (input === "4") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 5000); }
-            else if (input === "5") {
-              chatMessages = [{ role: "system", content: "You are a helpful assistant." }];
-              chatCount = 0;
-              await speak("You can now ask anything! You have 5 questions.");
-              listen("chatMode");
-            }
+            else if (input === "4") { await speak("You can now ask anything! You have 5 questions."); chatMessages = [{ role: "system", content: "You are a helpful assistant." }]; chatCount = 0; listen("chatMode"); }
+            else if (input === "5") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 5000); }
             break;
 
           case "getName":
