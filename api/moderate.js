@@ -16,9 +16,12 @@ export default async function handler(req, res) {
         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "You're a profanity filter. If the user message is inappropriate, respond ONLY with 'blocked'. If clean, ONLY 'safe'." },
+          {
+            role: "system",
+            content: "You're a profanity filter. If the user message is inappropriate, respond ONLY with 'blocked'. If clean, ONLY 'safe'."
+          },
           { role: "user", content: input }
         ],
         max_tokens: 1,
