@@ -54,7 +54,7 @@
   <div id="console"></div>
 
   <div id="input-area" style="display:none;">
-    <input id="user-input" placeholder="Type your response..." />
+    <input id="user-input" placeholder="Type your response..." onkeydown="if(event.key==='Enter'){handleInput()}" />
     <button onclick="handleInput()">Submit</button>
   </div>
 
@@ -175,14 +175,20 @@
           if (opt === "1") await speak("1. What is your name?");
           if (opt === "2") await speak("2. How are you?");
           if (opt === "3") await speak("3. Try a math trick");
-          if (opt === "5") await speak("5. Exit");
-          if (opt === "4") await speak("4. Ask anything (ChatGPT mode)");
+          if (opt === "4") await speak("4. Exit");
+          if (opt === "5") await speak("5. Ask anything (ChatGPT mode)");
         }
         listen("menu");
       }
 
+      function handleInput() {
+        speak("You entered: " + userInput.value);
+        // Add your input handling logic here...
+      }
+
       window.startInteraction = startInteraction;
       window.submitUnlock = submitUnlock;
+      window.handleInput = handleInput;
     });
   </script>
 </body>
