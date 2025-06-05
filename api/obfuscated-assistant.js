@@ -40,4 +40,5 @@ export const obfuscatedScript = `window.addEventListener("DOMContentLoaded", () 
   window.submitUnlock = function() {
     speak("Unlock system not required in demo.");
   };
-});`;
+});
+`;
