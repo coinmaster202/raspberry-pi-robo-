@@ -1,0 +1,1 @@
+export const obfuscatedScript = `window.addEventListener("DOMContentLoaded", () => { const consoleEl = document.getElementById('console'); const speak = (text) => { consoleEl.innerHTML += "🤖: " + text + "\n"; }; window.startInteraction = () => { speak("Secure assistant script has been loaded from server."); }; });`;
