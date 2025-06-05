@@ -29,13 +29,12 @@
       position: fixed;
       top: 0; left: 0;
       width: 100%; height: 100%;
-      background: rgba(255,0,0,0.7);
+      background: rgba(0,0,0,0.9);
       z-index: 9999;
-      animation: flash 0.5s alternate infinite;
-    }
-    @keyframes flash {
-      from { background-color: rgba(255,0,0,0.6); }
-      to   { background-color: rgba(255,0,0,0.9); }
+      text-align: center;
+      color: red;
+      padding-top: 20%;
+      font-size: 24px;
     }
   </style>
 </head>
@@ -47,7 +46,8 @@
     <input id="user-input" type="text" placeholder="Type your response...">
     <button onclick="handleInput()">Submit</button>
   </div>
-  <div id="overlay"></div>
+  <div id="overlay">🚨 Terminal Locked 🚨<br>Awaiting authorized member to unlock with code 2026.</div>
+  <audio id="siren" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
   <a id="log-download" style="display:none;"></a>
 
   <script>
@@ -56,6 +56,7 @@
     const userInput = document.getElementById('user-input');
     const overlay = document.getElementById('overlay');
     const logDownload = document.getElementById('log-download');
+    const siren = document.getElementById('siren');
 
     let currentState = null;
     let asked = new Set();
@@ -73,9 +74,11 @@
 
     function listen(state) {
       currentState = state;
-      inputArea.style.display = 'block';
-      userInput.value = '';
-      userInput.focus();
+      if (!locked) {
+        inputArea.style.display = 'block';
+        userInput.value = '';
+        userInput.focus();
+      }
     }
 
     async function startInteraction() {
@@ -164,9 +167,11 @@
     async function triggerLockdown(input) {
       locked = true;
       overlay.style.display = "block";
+      siren.play();
       logEntry = `🚨 Blocked input: '${input}'\nTime: ${new Date().toLocaleString()}`;
-      await speak("⚠️ Inappropriate input detected and blocked.");
-      await speak("Access locked. Enter unlock code.");
+      await speak("⚠️ This message has been flagged as inappropriate.");
+      await speak("All further interaction has been blocked due to the use of an inappropriate word.");
+      await speak("Please stand by and ask an authorized member to unlock the terminal.");
       downloadLog();
       listen("unlock");
     }
