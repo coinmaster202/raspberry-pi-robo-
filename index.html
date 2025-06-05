@@ -1,3 +1,4 @@
+<!-- updated HTML with math trick confirmations -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -132,6 +133,16 @@
         return;
       }
 
+      if (currentState === "mathStepConfirm") {
+        if (input === "3") {
+          await continueMathTrick();
+        } else {
+          await speak("Please press 3 to proceed with the trick.");
+          listen("mathStepConfirm");
+        }
+        return;
+      }
+
       switch (currentState) {
         case "menu":
           if (input === "1") {
@@ -139,7 +150,7 @@
           } else if (input === "2") {
             asked.add("2"); await speak("How are you feeling today?"); listen("mood");
           } else if (input === "3") {
-            asked.add("3"); await mathTrick(); showMenu();
+            asked.add("3"); await mathTrick();
           } else if (input === "4") {
             asked.add("4"); await speak("Goodbye!");
           } else {
@@ -159,13 +170,34 @@
       }
     }
 
+    let mathSteps = [];
     async function mathTrick() {
-      await speak("Think of any number, don't tell me.");
-      await speak("Now double it.");
-      await speak("Add 10.");
-      await speak("Divide by 2.");
-      await speak("Now subtract the number you started with.");
-      await speak("The answer is... 5! 😄");
+      mathSteps = [
+        "Think of any number, don't tell me.",
+        "Now double it.",
+        "Add 10.",
+        "Divide by 2.",
+        "Now subtract the number you started with.",
+        "The answer is... 5! 😄"
+      ];
+      await speak("Let's do a fun math trick. After each step, press 3 to continue.");
+      await nextMathStep();
+    }
+
+    async function nextMathStep() {
+      if (mathSteps.length === 0) {
+        await speak("Trick complete. Returning to menu.");
+        return showMenu();
+      }
+      const step = mathSteps.shift();
+      await speak(step);
+      await speak("Press 3 to continue...");
+      listen("mathStepConfirm");
+    }
+
+    async function continueMathTrick() {
+      inputArea.style.display = 'none';
+      await nextMathStep();
     }
 
     async function triggerLockdown(input) {
