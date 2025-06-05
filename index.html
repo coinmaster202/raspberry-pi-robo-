@@ -9,6 +9,8 @@
       background: #111;
       color: #0f0;
       padding: 20px;
+      margin: 0;
+      overflow: hidden;
     }
     #console {
       white-space: pre-wrap;
@@ -46,7 +48,7 @@
     }
   </style>
 </head>
-<body>
+<body oncontextmenu="return false" onkeydown="preventClose(event)">
   <h1>🔐 Secure Motion Assistant</h1>
   <button onclick="startInteraction()">👋 Simulate Motion Detected</button>
   <div id="console"></div>
@@ -110,8 +112,7 @@
       const options = ["1. What is your name?", "2. How are you?", "3. Try a math trick", "4. Exit"];
       const available = options.filter((_, i) => !asked.has((i+1).toString()));
       if (available.length === 0) {
-        await speak("You've completed all options. Restarting...");
-        setTimeout(startInteraction, 5000);
+        await speak("You've completed all options.");
         return;
       }
       await speak("Please choose one:");
@@ -140,7 +141,7 @@
           } else if (input === "3") {
             asked.add("3"); await mathTrick(); showMenu();
           } else if (input === "4") {
-            asked.add("4"); await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 5000);
+            asked.add("4"); await speak("Goodbye!");
           } else {
             await speak("Invalid choice."); showMenu();
           }
@@ -185,7 +186,6 @@
         overlay.style.display = "none";
         logDownload.style.display = 'none';
         speak("✅ Terminal unlocked.");
-        startInteraction();
       } else {
         speak("❌ Invalid unlock code.");
       }
@@ -211,6 +211,13 @@
       } catch (err) {
         console.error("Moderation failed:", err);
         return false;
+      }
+    }
+
+    function preventClose(e) {
+      if ((e.key === 'F4' && e.altKey) || e.key === 'Escape') {
+        e.preventDefault();
+        alert('Closing or minimizing is disabled while locked.');
       }
     }
   </script>
