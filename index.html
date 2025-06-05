@@ -2,14 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>🔐 Secure Motion Assistant (OpenAI Filter)</title>
+  <title>🔐 Secure Motion Assistant (with OpenAI Filter)</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       background: #111;
       color: #0f0;
       padding: 20px;
-      position: relative;
     }
     #console {
       white-space: pre-wrap;
@@ -25,23 +24,18 @@
       padding: 10px;
       font-size: 16px;
     }
-    h1 {
-      color: lime;
-    }
     #overlay {
       display: none;
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(255, 0, 0, 0.6);
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(255,0,0,0.7);
       z-index: 9999;
       animation: flash 0.5s alternate infinite;
     }
     @keyframes flash {
-      from { background-color: rgba(255, 0, 0, 0.6); }
-      to   { background-color: rgba(255, 0, 0, 0.9); }
+      from { background-color: rgba(255,0,0,0.6); }
+      to   { background-color: rgba(255,0,0,0.9); }
     }
   </style>
 </head>
@@ -64,31 +58,17 @@
     const logDownload = document.getElementById('log-download');
 
     let currentState = null;
-    let userName = "";
     let asked = new Set();
-    let availableOptions = ["1", "2", "3", "4"];
     let locked = false;
     let logEntry = "";
     const UNLOCK_CODE = "2026";
 
-    const OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"; // ⚠️ Replace with your key
-
-    async function delay(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async function speak(text, delayMs = 1500) {
-      return new Promise(resolve => {
-        setTimeout(() => {
-          consoleEl.innerHTML += `🤖: ${text}\n`;
-          consoleEl.scrollTop = consoleEl.scrollHeight;
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'en-US';
-          utterance.rate = 1;
-          speechSynthesis.speak(utterance);
-          resolve();
-        }, delayMs);
-      });
+    async function speak(text) {
+      consoleEl.innerHTML += `🤖: ${text}\n`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      speechSynthesis.speak(utterance);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+      return new Promise(res => setTimeout(res, 1500));
     }
 
     function listen(state) {
@@ -98,13 +78,95 @@
       userInput.focus();
     }
 
-    async function triggerLockdown(badInput = "") {
+    async function startInteraction() {
+      if (locked) return;
+      asked.clear();
+      consoleEl.innerHTML = '';
+      await speak("Hello! I see someone just arrived.");
+      await speak("Welcome to my interactive assistant.");
+      showMenu();
+    }
+
+    async function showMenu() {
+      const options = ["1. What is your name?", "2. How are you?", "3. Try a math trick", "4. Exit"];
+      const available = options.filter((_, i) => !asked.has((i+1).toString()));
+      if (available.length === 0) {
+        await speak("You've completed all options. Restarting...");
+        setTimeout(startInteraction, 5000);
+        return;
+      }
+      await speak("Please choose one:");
+      for (let option of available) await speak(option);
+      listen("menu");
+    }
+
+    async function handleInput() {
+      const rawInput = userInput.value.trim();
+      const input = rawInput.toLowerCase();
+      inputArea.style.display = 'none';
+
+      consoleEl.innerHTML += `You: ${rawInput}\n`;
+      await speak("Checking input...");
+      if (await openAIModerationCheck(rawInput)) {
+        await triggerLockdown(rawInput);
+        return;
+      }
+
+      if (locked) {
+        if (currentState === "unlock" && input === UNLOCK_CODE) {
+          locked = false;
+          overlay.style.display = "none";
+          logDownload.style.display = "none";
+          await speak("✅ Terminal unlocked.");
+          return startInteraction();
+        } else {
+          await speak("❌ Invalid unlock code.");
+          return listen("unlock");
+        }
+      }
+
+      switch (currentState) {
+        case "menu":
+          if (input === "1") {
+            asked.add("1"); await speak("What is your name?"); listen("name");
+          } else if (input === "2") {
+            asked.add("2"); await speak("How are you feeling today?"); listen("mood");
+          } else if (input === "3") {
+            asked.add("3"); await mathTrick(); showMenu();
+          } else if (input === "4") {
+            asked.add("4"); await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 5000);
+          } else {
+            await speak("Invalid choice."); showMenu();
+          }
+          break;
+
+        case "name":
+          await speak(`Nice to meet you, ${rawInput || 'friend'}!`);
+          showMenu();
+          break;
+
+        case "mood":
+          await speak("Thanks for sharing that with me.");
+          showMenu();
+          break;
+      }
+    }
+
+    async function mathTrick() {
+      await speak("Think of any number, don't tell me.");
+      await speak("Now double it.");
+      await speak("Add 10.");
+      await speak("Divide by 2.");
+      await speak("Now subtract the number you started with.");
+      await speak("The answer is... 5! 😄");
+    }
+
+    async function triggerLockdown(input) {
       locked = true;
       overlay.style.display = "block";
-      logEntry = `🚨 Profanity Detected: "${badInput}"\nTime: ${new Date().toLocaleString()}`;
-      await speak("⚠️ This message has been flagged as inappropriate and blocked.");
-      await speak("Access has been restricted. Please contact support to unlock this terminal.");
-      await speak("Enter unlock code to continue.");
+      logEntry = `🚨 Blocked input: '${input}'\nTime: ${new Date().toLocaleString()}`;
+      await speak("⚠️ Inappropriate input detected and blocked.");
+      await speak("Access locked. Enter unlock code.");
       downloadLog();
       listen("unlock");
     }
@@ -119,168 +181,17 @@
 
     async function openAIModerationCheck(userInput) {
       try {
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        const res = await fetch("/api/moderate", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${OPENAI_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: "gpt-4",
-            messages: [
-              { role: "system", content: "You are a moderation system. If the message contains profanity, hate, threats, sexual content, or harmful language in any form, reply ONLY with 'blocked'. Otherwise, reply ONLY with 'safe'." },
-              { role: "user", content: userInput }
-            ],
-            max_tokens: 1,
-            temperature: 0
-          })
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: userInput })
         });
-        const data = await response.json();
-        const decision = data.choices[0].message.content.trim().toLowerCase();
-        return decision === "blocked";
-      } catch (e) {
-        console.error("OpenAI moderation failed:", e);
-        return false; // fallback safe
+        const data = await res.json();
+        return data.result === "blocked";
+      } catch (err) {
+        console.error("Moderation failed:", err);
+        return false;
       }
-    }
-
-    async function startInteraction() {
-      if (locked) return;
-      consoleEl.innerHTML = '';
-      asked.clear();
-      availableOptions = ["1", "2", "3", "4"];
-      await speak("Hello! I see someone just arrived.");
-      await delay(700);
-      await speak("Welcome to my interactive assistant.");
-      await delay(700);
-      showMenu();
-    }
-
-    async function showMenu() {
-      const remaining = availableOptions.filter(opt => !asked.has(opt));
-      if (remaining.length === 0) {
-        await speak("You've completed all options. Restarting in 5 seconds...");
-        setTimeout(startInteraction, 5000);
-        return;
-      }
-      await speak("Please choose one of the following options:");
-      for (const opt of remaining) {
-        if (opt === "1") await speak("1. What is your name?"), await delay(400);
-        if (opt === "2") await speak("2. How are you?"), await delay(400);
-        if (opt === "3") await speak("3. Try a math trick"), await delay(400);
-        if (opt === "4") await speak("4. Exit"), await delay(400);
-      }
-      listen("menu");
-    }
-
-    async function handleInput() {
-      const rawInput = userInput.value.trim();
-      const input = rawInput.toLowerCase();
-      inputArea.style.display = 'none';
-
-      await speak("Checking input...");
-      await delay(700);
-      if (await openAIModerationCheck(rawInput)) {
-        await triggerLockdown(rawInput);
-        return;
-      }
-
-      consoleEl.innerHTML += `You: ${rawInput}\n`;
-
-      if (locked) {
-        if (currentState === "unlock") {
-          if (input === UNLOCK_CODE) {
-            locked = false;
-            overlay.style.display = "none";
-            logDownload.style.display = "none";
-            await speak("✅ Unlock code accepted. Terminal access restored.");
-            await delay(1000);
-            startInteraction();
-          } else {
-            await speak("❌ Invalid unlock code. Access remains restricted.");
-            listen("unlock");
-          }
-        }
-        return;
-      }
-
-      switch (currentState) {
-        case "menu":
-          if (!availableOptions.includes(input)) {
-            await speak("Sorry, that option is not available.");
-            showMenu();
-            return;
-          }
-          if (asked.has(input)) {
-            await speak("You've already selected that option.");
-            showMenu();
-            return;
-          }
-          asked.add(input);
-          if (input === "1") {
-            await speak("What is your name?");
-            listen("getName");
-          } else if (input === "2") {
-            await speak("How are you feeling today?");
-            listen("getMood");
-          } else if (input === "3") {
-            await mathTrick();
-            await speak("Returning to the menu...");
-            await delay(1000);
-            showMenu();
-          } else if (input === "4") {
-            await speak("Goodbye! I will restart shortly...");
-            setTimeout(startInteraction, 5000);
-          }
-          break;
-
-        case "getName":
-          await speak("Checking input...");
-          await delay(500);
-          if (await openAIModerationCheck(rawInput)) {
-            await triggerLockdown(rawInput);
-            return;
-          }
-          userName = input.replace(/[^a-zA-Z ]/g, '').trim();
-          await speak(`Nice to meet you, ${userName || 'friend'}!`);
-          await delay(600);
-          showMenu();
-          break;
-
-        case "getMood":
-          await speak("Checking input...");
-          await delay(500);
-          if (await openAIModerationCheck(rawInput)) {
-            await triggerLockdown(rawInput);
-            return;
-          }
-          if (["good", "great", "fine", "okay", "happy"].some(word => input.includes(word))) {
-            await speak("That's awesome to hear!");
-          } else if (["bad", "tired", "sad", "angry", "upset"].some(word => input.includes(word))) {
-            await speak("I'm sorry to hear that. I hope things get better soon.");
-          } else {
-            await speak("Thanks for sharing that with me.");
-          }
-          await delay(600);
-          showMenu();
-          break;
-      }
-    }
-
-    async function mathTrick() {
-      await speak("Let's do a fun mind trick.");
-      await delay(1000);
-      await speak("Think of any number in your mind, but don’t tell me.");
-      await delay(1300);
-      await speak("Now double it.");
-      await delay(1300);
-      await speak("Add 10 to the result.");
-      await delay(1300);
-      await speak("Now divide that by 2.");
-      await delay(1300);
-      await speak("Finally, subtract the number you originally thought of.");
-      await delay(1600);
-      await speak("The answer is... 5! 😄");
     }
   </script>
 </body>
