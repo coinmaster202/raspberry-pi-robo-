@@ -78,28 +78,27 @@
     const overlay = document.getElementById('overlay');
     const unlockInput = document.getElementById('unlock-code');
 
-    let currentState = null;
-    let asked = new Set();
-    let locked = false;
-    let chatMessages = [];
-    let chatCount = 0;
-    const UNLOCK_CODE = "2026";
-
-    const profanityList = ["fuck", "shit", "bitch", "asshole", "cunt", "dick", "nigger", "slut", "whore", "rape", "porn"];
-
     const optionMap = {
       "1": "1. What is your name?",
       "2": "2. How are you?",
       "3": "3. Try a math trick",
-      "5": "5. Ask anything (ChatGPT mode)",
-      "6": "6. Tell me a joke",
-      "7": "7. Fun fact of the day",
-      "8": "8. Guess my age",
-      "9": "9. Compliment me",
-      "4": "4. Exit"
+      "4": "4. Ask anything (ChatGPT mode)",
+      "5": "5. Tell me a joke",
+      "6": "6. Fun fact of the day",
+      "7": "7. Guess my age",
+      "8": "8. Compliment me",
+      "9": "9. Surprise me",
+      "10": "10. Exit"
     };
 
-    const displayOrder = ["1", "2", "3", "5", "6", "7", "8", "9", "4"];
+    const displayOrder = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+    const profanityList = ["fuck", "shit", "bitch", "asshole", "cunt", "dick", "nigger", "slut", "whore", "rape", "porn"];
+    const UNLOCK_CODE = "2026";
+
+    let currentState = null;
+    let asked = new Set();
+    let locked = false;
+    let chatCount = 0;
 
     function delay(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
@@ -143,7 +142,6 @@
       if (locked) return;
       consoleEl.innerHTML = '';
       asked.clear();
-      chatMessages = [];
       chatCount = 0;
       await speak("Hello! I see someone just arrived.");
       await delay(500);
@@ -186,12 +184,13 @@
         if (input === "1") { await speak("What is your name?"); listen("getName"); }
         else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
         else if (input === "3") { await mathTrick(); showMenu(); }
-        else if (input === "4") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 3000); }
-        else if (input === "5") { chatCount = 0; await speak("Ask anything. You have 5 questions."); listen("chat"); }
-        else if (input === "6") { await tellJoke(); showMenu(); }
-        else if (input === "7") { await tellFact(); showMenu(); }
-        else if (input === "8") { await speak("Do you like TikTok?"); listen("guessAge"); }
-        else if (input === "9") { await compliment(); showMenu(); }
+        else if (input === "4") { chatCount = 0; await speak("Ask anything. You have 5 questions."); listen("chat"); }
+        else if (input === "5") { await tellJoke(); showMenu(); }
+        else if (input === "6") { await tellFact(); showMenu(); }
+        else if (input === "7") { await speak("Do you like TikTok?"); listen("guessAge"); }
+        else if (input === "8") { await compliment(); showMenu(); }
+        else if (input === "9") { await speak("🎉 Surprise! You're amazing. Keep shining!"); showMenu(); }
+        else if (input === "10") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 3000); }
       }
 
       else if (currentState === "getName") {
@@ -215,7 +214,7 @@
           await speak("You've used all your questions. Returning to menu.");
           return showMenu();
         }
-        await speak("Pretend assistant reply here."); // Replace with API call
+        await speak("Pretend assistant reply here."); // Replace with real OpenAI call if desired
         listen("chat");
       }
     }
@@ -246,7 +245,7 @@
     async function tellFact() {
       const facts = [
         "Octopuses have three hearts.",
-        "Bananas are actually berries, but strawberries aren't.",
+        "Bananas are berries, but strawberries are not.",
         "A bolt of lightning contains enough energy to toast 100,000 slices of bread."
       ];
       await speak(facts[Math.floor(Math.random() * facts.length)]);
