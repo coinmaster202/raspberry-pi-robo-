@@ -2,185 +2,280 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>🔐 Secure Motion Assistant</title>
+  <title>Secure Motion Assistant</title>
   <style>
     body {
-      background: #000;
+      background: black;
       color: lime;
       font-family: monospace;
       padding: 20px;
     }
     #console {
       background: #111;
-      padding: 20px;
+      padding: 15px;
+      min-height: 300px;
       border-radius: 10px;
       white-space: pre-wrap;
-      min-height: 300px;
+      font-size: 18px;
     }
     input, button {
+      margin-top: 10px;
       padding: 10px;
       font-size: 16px;
     }
-    #input-area {
-      margin-top: 10px;
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 999;
+      color: white;
+      text-align: center;
+      padding-top: 100px;
+    }
+    #overlay-content {
+      background: #300;
+      border: 2px solid red;
+      padding: 30px;
+      border-radius: 15px;
+      display: inline-block;
+    }
+    #overlay input {
+      padding: 10px;
+      width: 200px;
+      font-size: 16px;
     }
   </style>
 </head>
 <body>
   <h1>🔐 Secure Motion Assistant</h1>
-  <button onclick="start()">👋 Simulate Motion Detected</button>
+  <button onclick="startInteraction()">👋 Simulate Motion Detected</button>
   <div id="console"></div>
+
   <div id="input-area" style="display:none;">
-    <input id="user-input" placeholder="Type your response..." />
-    <button onclick="handle()">Submit</button>
+    <input id="user-input" placeholder="Type your response..." onkeydown="if(event.key==='Enter'){handleInput()}" />
+    <button onclick="handleInput()">Submit</button>
+  </div>
+
+  <div id="overlay">
+    <div id="overlay-content">
+      <h2>🚨 Terminal Locked</h2>
+      <p>This message has been flagged as inappropriate and blocked.</p>
+      <p>Access restricted. Enter unlock code:</p>
+      <input id="unlock-code" type="text" placeholder="Enter code" onkeydown="if(event.key==='Enter'){submitUnlock()}" />
+      <br><br>
+      <button onclick="submitUnlock()">Unlock</button>
+    </div>
+    <audio id="siren" src="https://www.soundjay.com/misc/sounds/siren-noise-01.mp3" autoplay loop></audio>
   </div>
 
   <script>
-    const consoleEl = document.getElementById("console");
-    const inputArea = document.getElementById("input-area");
-    const userInput = document.getElementById("user-input");
+    const consoleEl = document.getElementById('console');
+    const inputArea = document.getElementById('input-area');
+    const userInput = document.getElementById('user-input');
+    const overlay = document.getElementById('overlay');
+    const unlockInput = document.getElementById('unlock-code');
+    const sirenAudio = document.getElementById('siren');
 
-    let state = null;
+    let currentState = null;
+    let userName = '';
+    let asked = new Set();
     let chatMessages = [];
     let chatCount = 0;
+    let locked = false;
 
-    const OPTIONS = [
-      { key: "1", text: "What is your name?", state: "getName" },
-      { key: "2", text: "How are you?", state: "getMood" },
-      { key: "3", text: "Try a math trick", state: "mathTrick" },
-      { key: "4", text: "Ask anything (ChatGPT mode)", state: "chat" },
-      { key: "5", text: "Tell me a joke", prompt: "Tell me a funny joke." },
-      { key: "6", text: "Fun fact of the day", prompt: "Tell me a fun fact." },
-      { key: "7", text: "Guess my age", prompt: "Try to guess how old I am." },
-      { key: "8", text: "Compliment me", prompt: "Say something nice to me." },
-      { key: "9", text: "Surprise me", prompt: "Give me a random surprise." },
-      { key: "10", text: "Exit", state: "exit" }
-    ];
+    const UNLOCK_CODE = '2026';
 
-    function speak(text) {
-      const msg = new SpeechSynthesisUtterance(text);
-      msg.lang = 'en-US';
-      msg.rate = 1;
-      speechSynthesis.speak(msg);
+    const speak = async (text) => {
       consoleEl.innerHTML += `🤖: ${text}\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
-    }
+      return new Promise(resolve => {
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'en-US';
+        utter.onend = resolve;
+        speechSynthesis.speak(utter);
+      });
+    };
 
-    function listen(nextState) {
-      state = nextState;
-      inputArea.style.display = "block";
+    const listen = (state) => {
+      currentState = state;
+      inputArea.style.display = 'block';
+      userInput.value = '';
       userInput.focus();
-    }
+    };
 
-    function start() {
-      consoleEl.innerHTML = "";
+    const startInteraction = async () => {
+      if (locked) return;
+      consoleEl.innerHTML = '';
+      asked.clear();
       chatMessages = [];
       chatCount = 0;
-      speak("Hello! I see someone just arrived.");
-      setTimeout(showMenu, 1000);
-    }
+      await speak("Hello! I see someone just arrived.");
+      await speak("Welcome to my interactive assistant.");
+      showMenu();
+    };
 
-    function showMenu() {
-      speak("Please choose one of the following options:");
-      OPTIONS.forEach(opt => speak(`${opt.key}. ${opt.text}`));
+    const showMenu = async () => {
+      const options = [
+        "1. What is your name?",
+        "2. How are you?",
+        "3. Try a math trick",
+        "4. Ask anything (ChatGPT mode)",
+        "5. Tell me a joke",
+        "6. Fun fact of the day",
+        "7. Guess my age",
+        "8. Compliment me",
+        "9. Surprise me",
+        "10. Exit"
+      ];
+      await speak("Please choose one of the following options:");
+      for (const line of options) {
+        await speak(line);
+      }
       listen("menu");
-    }
+    };
 
-    async function handle() {
-      const input = userInput.value.trim();
-      inputArea.style.display = "none";
+    const handleInput = async () => {
+      const input = userInput.value.trim().toLowerCase();
       consoleEl.innerHTML += `You: ${input}\n`;
+      inputArea.style.display = 'none';
 
-      if (state === "menu") {
-        const choice = OPTIONS.find(opt => opt.key === input);
-        if (!choice) {
-          speak("That option is not available.");
-          return showMenu();
+      if (locked && currentState === "unlock") {
+        if (input === UNLOCK_CODE) {
+          overlay.style.display = 'none';
+          sirenAudio.pause();
+          locked = false;
+          await speak("✅ Terminal unlocked.");
+          startInteraction();
+        } else {
+          await speak("❌ Invalid unlock code.");
+          listen("unlock");
         }
+        return;
+      }
 
-        if (choice.prompt) {
-          const reply = await askGPT(choice.prompt);
-          speak(reply);
-          return showMenu();
-        }
+      if (await containsProfanity(input)) {
+        triggerLockdown(input);
+        return;
+      }
 
-        switch (choice.state) {
-          case "getName":
-            speak("What is your name?");
-            return listen("getName");
-          case "getMood":
-            speak("How are you feeling today?");
-            return listen("getMood");
-          case "mathTrick":
-            return await mathTrick();
-          case "chat":
-            speak("Ask anything. You have 5 questions.");
-            return listen("chat");
-          case "exit":
-            speak("Goodbye. Restarting in 5 seconds...");
-            return setTimeout(start, 5000);
+      if (currentState === "menu") {
+        switch (input) {
+          case "1":
+            await speak("What is your name?");
+            listen("getName"); break;
+          case "2":
+            await speak("How are you feeling today?");
+            listen("getMood"); break;
+          case "3":
+            await mathTrick();
+            showMenu(); break;
+          case "4":
+            await speak("Ask anything. You have 5 questions.");
+            chatMessages = [{ role: "system", content: "You are a helpful assistant." }];
+            chatCount = 0;
+            listen("chatMode"); break;
+          case "5":
+            await speak("Why don’t skeletons fight each other? They don’t have the guts.");
+            showMenu(); break;
+          case "6":
+            await speak("Did you know? Honey never spoils. Archaeologists have found 3000-year-old honey that’s still edible!");
+            showMenu(); break;
+          case "7":
+            await speak("Hmm... I’d guess you're 21! 😄");
+            showMenu(); break;
+          case "8":
+            await speak("You’re doing great and I’m glad you're here!");
+            showMenu(); break;
+          case "9":
+            await speak("Surprise! You just earned a virtual high five ✋");
+            showMenu(); break;
+          case "10":
+            await speak("Goodbye! Restarting soon...");
+            setTimeout(startInteraction, 4000);
+            break;
+          default:
+            await speak("Invalid option. Try again.");
+            showMenu();
         }
       }
 
-      if (state === "getName") {
-        speak(`Nice to meet you, ${input}!`);
-        return showMenu();
+      else if (currentState === "getName") {
+        userName = input.replace(/[^a-zA-Z ]/g, '');
+        await speak(`Nice to meet you, ${userName || "friend"}!`);
+        showMenu();
       }
 
-      if (state === "getMood") {
-        speak("Thanks for sharing how you feel.");
-        return showMenu();
+      else if (currentState === "getMood") {
+        await speak("Thanks for sharing that.");
+        showMenu();
       }
 
-      if (state === "chat") {
+      else if (currentState === "chatMode") {
         chatMessages.push({ role: "user", content: input });
-        const reply = await askGPT(input);
+        const reply = await fetchChat(chatMessages);
         chatMessages.push({ role: "assistant", content: reply });
-        speak(reply);
+        await speak(reply);
         chatCount++;
         if (chatCount >= 5) {
-          speak("You’ve reached your 5-question limit.");
-          return showMenu();
+          await speak("That was your last question. Returning to menu...");
+          showMenu();
         } else {
-          return listen("chat");
+          listen("chatMode");
         }
       }
-    }
+    };
 
-    async function askGPT(prompt) {
+    const mathTrick = async () => {
+      await speak("Let's do a fun mind trick.");
+      await speak("Think of a number. Double it. Add 10. Divide by 2. Subtract the original number.");
+      await speak("The answer is... 5! 😄");
+    };
+
+    const triggerLockdown = async (badInput) => {
+      locked = true;
+      overlay.style.display = "block";
+      await speak("⚠️ This message has been flagged as inappropriate.");
+      await speak("Access has been restricted. Enter unlock code.");
+      unlockInput.focus();
+    };
+
+    const submitUnlock = () => {
+      handleInput();
+    };
+
+    const containsProfanity = async (text) => {
       try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
+        const res = await fetch('/api/moderate', {
+          method: 'POST',
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: prompt }] })
+          body: JSON.stringify({ input: text })
         });
         const data = await res.json();
-        return data.reply || "Sorry, I didn’t get a response.";
-      } catch (err) {
-        return "Error: could not reach the assistant.";
+        return data.flagged === true;
+      } catch (e) {
+        console.warn("Moderation check failed:", e);
+        return false;
       }
-    }
+    };
 
-    async function mathTrick() {
-      speak("Let's do a fun mind trick.");
-      await delay(1000);
-      speak("Think of a number.");
-      await delay(1300);
-      speak("Double it.");
-      await delay(1300);
-      speak("Add 10.");
-      await delay(1300);
-      speak("Divide by 2.");
-      await delay(1300);
-      speak("Subtract your original number.");
-      await delay(1300);
-      speak("The answer is... 5! 😄");
-      showMenu();
-    }
+    const fetchChat = async (messages) => {
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages })
+        });
+        const data = await res.json();
+        return data.reply || "I couldn't get a reply.";
+      } catch (e) {
+        return "Error contacting the assistant.";
+      }
+    };
 
-    function delay(ms) {
-      return new Promise(res => setTimeout(res, ms));
-    }
+    window.startInteraction = startInteraction;
+    window.handleInput = handleInput;
+    window.submitUnlock = submitUnlock;
   </script>
 </body>
 </html>
