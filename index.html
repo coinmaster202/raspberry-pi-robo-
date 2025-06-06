@@ -59,7 +59,6 @@
     <button onclick="handleInput()">Submit</button>
   </div>
 
-  <!-- Lock overlay when profanity/flagged content is detected -->
   <div id="overlay">
     <div id="overlay-content">
       <h2>🚨 Terminal Locked</h2>
@@ -127,21 +126,6 @@
       userInput.focus();
     }
 
-    async function checkProfanity(text) {
-      try {
-        const res = await fetch('/api/moderate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ input: text })
-        });
-        const result = await res.json();
-        return result.flagged;
-      } catch {
-        // If moderation fails (network error), let’s err on the side of caution
-        return true;
-      }
-    }
-
     function submitUnlock() {
       if (unlockInput.value.trim() === UNLOCK_CODE) {
         overlay.style.display = "none";
@@ -153,7 +137,7 @@
       }
     }
 
-    // Entry point for “Simulate Motion Detected”
+    // Entry point
     async function startInteraction() {
       if (locked) return;
       consoleEl.innerHTML = '';
@@ -166,7 +150,7 @@
       showMenu();
     }
 
-    // Display the main menu
+    // Show menu options
     async function showMenu() {
       const remaining = displayOrder.filter(opt => !asked.has(opt));
       if (remaining.length === 0) {
@@ -181,23 +165,16 @@
       listen("menu");
     }
 
-    // Handle user input in all states
+    // Handle input in all states
     async function handleInput() {
       const raw = userInput.value.trim();
       const input = raw.toLowerCase();
       consoleEl.innerHTML += `You: ${raw}\n`;
       inputArea.style.display = "none";
 
-      // 1) Check profanity/security for every single user message
-      const flagged = await checkProfanity(raw);
-      if (flagged) {
-        locked = true;
-        overlay.style.display = "block";
-        await speak("⚠️ This message has been flagged and blocked.");
-        return;
-      }
-
-      // 2) Handle each state
+      // ─────────────────────────────
+      // 1) MENU SELECTION (no moderation)
+      // ─────────────────────────────
       if (currentState === "menu") {
         if (!optionMap[input] || asked.has(input)) {
           await speak("That option is not available.");
@@ -247,74 +224,108 @@
             setTimeout(startInteraction, 3000);
             break;
         }
-      }
-      else if (currentState === "getName") {
-        await speak(`Nice to meet you, ${raw}`);
-        showMenu();
-      }
-      else if (currentState === "getMood") {
-        await speak("Thanks for sharing.");
-        showMenu();
-      }
-      else if (currentState === "guessAge") {
-        await speak(raw.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
-        showMenu();
+        return;
       }
 
-      // ───────────── “ChatGPT mode” ─────────────
-      else if (currentState === "chat") {
+      // ─────────────────────────────────────────────────────────
+      // 2) NAME, MOOD, GUESS AGE, etc. (no moderation for these)
+      // ─────────────────────────────────────────────────────────
+      if (currentState === "getName") {
+        await speak(`Nice to meet you, ${raw}`);
+        return showMenu();
+      }
+      if (currentState === "getMood") {
+        await speak("Thanks for sharing.");
+        return showMenu();
+      }
+      if (currentState === "guessAge") {
+        await speak(raw.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
+        return showMenu();
+      }
+
+      // ─────────────────────────────────────────────────────────
+      // 3) CHATGPT MODE (we run moderation here ONLY)
+      // ─────────────────────────────────────────────────────────
+      if (currentState === "chat") {
         chatCount++;
         if (chatCount > 5) {
           await speak("You've used all your questions. Returning to menu.");
           return showMenu();
         }
 
-        // Build the messages array (system + user)
+        // 3a) Check profanity/’flagged’ only for chat inputs
+        let flagged = false;
+        try {
+          const modRes = await fetch('/api/moderate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input: raw })
+          });
+          const modJson = await modRes.json();
+          flagged = modJson.flagged;
+        } catch {
+          // If moderation fails entirely, we block to be safe.
+          flagged = true;
+        }
+
+        if (flagged) {
+          locked = true;
+          overlay.style.display = "block";
+          await speak("⚠️ This message was flagged and blocked.");
+          return;
+        }
+
+        // 3b) If not flagged, call /api/chat
         const messages = [
           { role: "system", content: "You are a helpful assistant." },
           { role: "user", content: raw }
         ];
 
         try {
-          // 3) Call our /api/chat endpoint
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ messages })
           });
-          const data = await res.json();
 
           if (res.status === 403) {
-            // If the chat endpoint says “flagged,” lock the UI
+            // If the server‐side moderation also flags it, lock the UI
             locked = true;
             overlay.style.display = "block";
             await speak("⚠️ Your last message was blocked due to policy violation.");
             return;
           }
+
+          const data = await res.json();
           if (res.status !== 200 || !data.reply) {
             throw new Error("Invalid response from chat endpoint");
           }
 
-          // 4) Speak the assistant’s reply
           await speak(data.reply);
         } catch (e) {
           console.error("Chat fetch error:", e);
           await speak("Sorry, there was an error.");
         }
 
-        // 5) Prompt for the next chat question (unless we've reached 5)
         if (!locked && chatCount < 5) {
           listen("chat");
         } else if (chatCount >= 5) {
           await speak("You've reached 5 questions. Returning to menu shortly.");
           showMenu();
         }
+        return;
       }
+
+      // ─────────────────────────────────────────────────────────
+      // 4) FALLBACK (shouldn’t happen—but just in case)
+      // ─────────────────────────────────────────────────────────
+      await speak("I didn't understand that. Returning to menu.");
+      return showMenu();
     }
 
-    // ─────────────────────────────────────────────────────────────
-    //  OTHER UTILITY FUNCTIONS (unchanged)
-    // ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    //  OTHER UTILITY FUNCTIONS (unchanged from before)
+    // ─────────────────────────────────────────────────────────
 
     async function mathTrick() {
       await speak("Think of any number.");
