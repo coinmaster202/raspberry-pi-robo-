@@ -5,7 +5,7 @@
   <title>Secure Motion Assistant</title>
   <style>
     body {
-      background: black;
+      background: #000;
       color: lime;
       font-family: monospace;
       padding: 20px;
@@ -16,7 +16,6 @@
       min-height: 300px;
       border-radius: 10px;
       white-space: pre-wrap;
-      font-size: 18px;
     }
     input, button {
       margin-top: 10px;
@@ -27,23 +26,25 @@
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.95);
+      background: rgba(0,0,0,0.8);
       z-index: 999;
       color: white;
       text-align: center;
       padding-top: 100px;
     }
     #overlay-content {
+      display: inline-block;
       background: #300;
       border: 2px solid red;
       padding: 30px;
       border-radius: 15px;
-      display: inline-block;
+      font-size: 18px;
     }
     #overlay input {
-      padding: 10px;
+      padding: 8px;
+      margin-top: 10px;
       width: 200px;
-      font-size: 16px;
+      text-align: center;
     }
   </style>
 </head>
@@ -61,9 +62,10 @@
     <div id="overlay-content">
       <h2>🚨 Terminal Locked</h2>
       <p>This message has been flagged as inappropriate and blocked.</p>
-      <p>Access restricted. Enter unlock code:</p>
-      <input id="unlock-code" type="text" placeholder="Enter code" onkeydown="if(event.key==='Enter'){submitUnlock()}" />
-      <br><br>
+      <p>Access has been restricted. Please contact support to unlock this terminal.</p>
+      <p>Enter unlock code to continue:</p>
+      <input id="unlock-code" type="text" placeholder="Enter code here" onkeydown="if(event.key==='Enter'){submitUnlock()}" />
+      <br>
       <button onclick="submitUnlock()">Unlock</button>
     </div>
     <audio id="siren" src="https://www.soundjay.com/misc/sounds/siren-noise-01.mp3" autoplay loop></audio>
@@ -75,203 +77,212 @@
     const userInput = document.getElementById('user-input');
     const overlay = document.getElementById('overlay');
     const unlockInput = document.getElementById('unlock-code');
-    const sirenAudio = document.getElementById('siren');
 
+    const optionMap = {
+      "1": "1. What is your name?",
+      "2": "2. How are you?",
+      "3": "3. Try a math trick",
+      "4": "4. Ask anything (ChatGPT mode)",
+      "5": "5. Tell me a joke",
+      "6": "6. Fun fact of the day",
+      "7": "7. Guess my age",
+      "8": "8. Compliment me",
+      "9": "9. Surprise me",
+      "10": "10. Exit"
+    };
+
+    const displayOrder = Object.keys(optionMap);
+    const UNLOCK_CODE = "2026";
     let currentState = null;
-    let userName = '';
     let asked = new Set();
-    let chatMessages = [];
-    let chatCount = 0;
     let locked = false;
+    let chatCount = 0;
 
-    const UNLOCK_CODE = '2026';
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
-    const speak = async (text) => {
+    async function speak(text) {
       consoleEl.innerHTML += `🤖: ${text}\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
       return new Promise(resolve => {
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = 'en-US';
-        utter.onend = resolve;
-        speechSynthesis.speak(utter);
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = "en-US";
+        msg.rate = 1;
+        msg.onend = resolve;
+        speechSynthesis.speak(msg);
       });
-    };
+    }
 
-    const listen = (state) => {
+    function listen(state) {
       currentState = state;
       inputArea.style.display = 'block';
       userInput.value = '';
       userInput.focus();
-    };
+    }
 
-    const startInteraction = async () => {
+    async function checkProfanity(text) {
+      try {
+        const res = await fetch('/api/moderate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: text })
+        });
+        const result = await res.json();
+        return result.flagged;
+      } catch {
+        return false;
+      }
+    }
+
+    function submitUnlock() {
+      if (unlockInput.value.trim() === UNLOCK_CODE) {
+        overlay.style.display = "none";
+        locked = false;
+        speak("✅ Terminal access restored.");
+        startInteraction();
+      } else {
+        speak("❌ Invalid code.");
+      }
+    }
+
+    async function startInteraction() {
       if (locked) return;
       consoleEl.innerHTML = '';
       asked.clear();
-      chatMessages = [];
       chatCount = 0;
       await speak("Hello! I see someone just arrived.");
+      await delay(500);
       await speak("Welcome to my interactive assistant.");
+      await delay(500);
       showMenu();
-    };
+    }
 
-    const showMenu = async () => {
-      const options = [
-        "1. What is your name?",
-        "2. How are you?",
-        "3. Try a math trick",
-        "4. Ask anything (ChatGPT mode)",
-        "5. Tell me a joke",
-        "6. Fun fact of the day",
-        "7. Guess my age",
-        "8. Compliment me",
-        "9. Surprise me",
-        "10. Exit"
-      ];
+    async function showMenu() {
+      const remaining = displayOrder.filter(opt => !asked.has(opt));
+      if (remaining.length === 0) {
+        await speak("You've completed all options. Restarting soon.");
+        return setTimeout(startInteraction, 3000);
+      }
       await speak("Please choose one of the following options:");
-      for (const line of options) {
-        await speak(line);
+      for (let opt of remaining) {
+        await speak(optionMap[opt]);
+        await delay(200);
       }
       listen("menu");
-    };
+    }
 
-    const handleInput = async () => {
+    async function handleInput() {
       const input = userInput.value.trim().toLowerCase();
       consoleEl.innerHTML += `You: ${input}\n`;
-      inputArea.style.display = 'none';
+      inputArea.style.display = "none";
 
-      if (locked && currentState === "unlock") {
-        if (input === UNLOCK_CODE) {
-          overlay.style.display = 'none';
-          sirenAudio.pause();
-          locked = false;
-          await speak("✅ Terminal unlocked.");
-          startInteraction();
-        } else {
-          await speak("❌ Invalid unlock code.");
-          listen("unlock");
-        }
-        return;
-      }
-
-      if (await containsProfanity(input)) {
-        triggerLockdown(input);
+      const flagged = await checkProfanity(input);
+      if (flagged) {
+        overlay.style.display = "block";
+        await speak("⚠️ This message has been flagged and blocked.");
         return;
       }
 
       if (currentState === "menu") {
-        switch (input) {
-          case "1":
-            await speak("What is your name?");
-            listen("getName"); break;
-          case "2":
-            await speak("How are you feeling today?");
-            listen("getMood"); break;
-          case "3":
-            await mathTrick();
-            showMenu(); break;
-          case "4":
-            await speak("Ask anything. You have 5 questions.");
-            chatMessages = [{ role: "system", content: "You are a helpful assistant." }];
-            chatCount = 0;
-            listen("chatMode"); break;
-          case "5":
-            await speak("Why don’t skeletons fight each other? They don’t have the guts.");
-            showMenu(); break;
-          case "6":
-            await speak("Did you know? Honey never spoils. Archaeologists have found 3000-year-old honey that’s still edible!");
-            showMenu(); break;
-          case "7":
-            await speak("Hmm... I’d guess you're 21! 😄");
-            showMenu(); break;
-          case "8":
-            await speak("You’re doing great and I’m glad you're here!");
-            showMenu(); break;
-          case "9":
-            await speak("Surprise! You just earned a virtual high five ✋");
-            showMenu(); break;
-          case "10":
-            await speak("Goodbye! Restarting soon...");
-            setTimeout(startInteraction, 4000);
-            break;
-          default:
-            await speak("Invalid option. Try again.");
-            showMenu();
+        if (!optionMap[input] || asked.has(input)) {
+          await speak("That option is not available.");
+          return showMenu();
         }
+        asked.add(input);
+        if (input === "1") { await speak("What is your name?"); listen("getName"); }
+        else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
+        else if (input === "3") { await mathTrick(); showMenu(); }
+        else if (input === "4") { chatCount = 0; await speak("Ask anything. You have 5 questions."); listen("chat"); }
+        else if (input === "5") { await tellJoke(); showMenu(); }
+        else if (input === "6") { await tellFact(); showMenu(); }
+        else if (input === "7") { await speak("Do you like TikTok?"); listen("guessAge"); }
+        else if (input === "8") { await compliment(); showMenu(); }
+        else if (input === "9") { await speak("🎉 Surprise! You're amazing. Keep shining!"); showMenu(); }
+        else if (input === "10") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 3000); }
       }
 
       else if (currentState === "getName") {
-        userName = input.replace(/[^a-zA-Z ]/g, '');
-        await speak(`Nice to meet you, ${userName || "friend"}!`);
+        await speak(`Nice to meet you, ${input}`);
         showMenu();
       }
 
       else if (currentState === "getMood") {
-        await speak("Thanks for sharing that.");
+        await speak("Thanks for sharing.");
         showMenu();
       }
 
-      else if (currentState === "chatMode") {
-        chatMessages.push({ role: "user", content: input });
-        const reply = await fetchChat(chatMessages);
-        chatMessages.push({ role: "assistant", content: reply });
-        await speak(reply);
+      else if (currentState === "guessAge") {
+        await speak(input.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
+        showMenu();
+      }
+
+      else if (currentState === "chat") {
         chatCount++;
-        if (chatCount >= 5) {
-          await speak("That was your last question. Returning to menu...");
-          showMenu();
-        } else {
-          listen("chatMode");
+        if (chatCount > 5) {
+          await speak("You've used all your questions. Returning to menu.");
+          return showMenu();
         }
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+                { role: 'system', content: 'You are a helpful assistant.' },
+                { role: 'user', content: input }
+              ]
+            })
+          });
+          const data = await res.json();
+          await speak(data.reply || "Sorry, no response received.");
+        } catch (e) {
+          await speak("Sorry, there was an error.");
+        }
+        listen("chat");
       }
-    };
+    }
 
-    const mathTrick = async () => {
-      await speak("Let's do a fun mind trick.");
-      await speak("Think of a number. Double it. Add 10. Divide by 2. Subtract the original number.");
-      await speak("The answer is... 5! 😄");
-    };
+    async function mathTrick() {
+      await speak("Think of any number.");
+      await delay(1200);
+      await speak("Double it.");
+      await delay(1200);
+      await speak("Add 10.");
+      await delay(1200);
+      await speak("Divide by 2.");
+      await delay(1200);
+      await speak("Subtract your original number.");
+      await delay(1500);
+      await speak("The answer is... 5!");
+    }
 
-    const triggerLockdown = async (badInput) => {
-      locked = true;
-      overlay.style.display = "block";
-      await speak("⚠️ This message has been flagged as inappropriate.");
-      await speak("Access has been restricted. Enter unlock code.");
-      unlockInput.focus();
-    };
+    async function tellJoke() {
+      const jokes = [
+        "Why did the computer go to therapy? It had too many bytes.",
+        "Parallel lines have so much in common... it's a shame they'll never meet.",
+        "Why don't robots panic? They have nerves of steel."
+      ];
+      await speak(jokes[Math.floor(Math.random() * jokes.length)]);
+    }
 
-    const submitUnlock = () => {
-      handleInput();
-    };
+    async function tellFact() {
+      const facts = [
+        "Octopuses have three hearts.",
+        "Bananas are berries, but strawberries are not.",
+        "A bolt of lightning contains enough energy to toast 100,000 slices of bread."
+      ];
+      await speak(facts[Math.floor(Math.random() * facts.length)]);
+    }
 
-    const containsProfanity = async (text) => {
-      try {
-        const res = await fetch('/api/moderate', {
-          method: 'POST',
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: text })
-        });
-        const data = await res.json();
-        return data.flagged === true;
-      } catch (e) {
-        console.warn("Moderation check failed:", e);
-        return false;
-      }
-    };
-
-    const fetchChat = async (messages) => {
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages })
-        });
-        const data = await res.json();
-        return data.reply || "I couldn't get a reply.";
-      } catch (e) {
-        return "Error contacting the assistant.";
-      }
-    };
+    async function compliment() {
+      const compliments = [
+        "You're awesome just the way you are.",
+        "If I had eyes, I’d say you look amazing today!",
+        "Your mind is sharper than my processor!"
+      ];
+      await speak(compliments[Math.floor(Math.random() * compliments.length)]);
+    }
 
     window.startInteraction = startInteraction;
     window.handleInput = handleInput;
