@@ -26,7 +26,7 @@
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.9);
       z-index: 999;
       color: white;
       text-align: center;
@@ -77,6 +77,7 @@
     const userInput = document.getElementById('user-input');
     const overlay = document.getElementById('overlay');
     const unlockInput = document.getElementById('unlock-code');
+    const UNLOCK_CODE = "2026";
 
     const optionMap = {
       "1": "1. What is your name?",
@@ -92,8 +93,6 @@
     };
 
     const displayOrder = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
-    const profanityList = ["fuck", "shit", "bitch", "asshole", "cunt", "dick", "nigger", "slut", "whore", "rape", "porn"];
-    const UNLOCK_CODE = "2026";
 
     let currentState = null;
     let asked = new Set();
@@ -123,18 +122,23 @@
       userInput.focus();
     }
 
-    function isProfane(text) {
-      return profanityList.some(word => text.includes(word));
-    }
-
-    function submitUnlock() {
-      if (unlockInput.value.trim() === UNLOCK_CODE) {
-        overlay.style.display = "none";
-        locked = false;
-        speak("✅ Terminal access restored.");
-        startInteraction();
-      } else {
-        speak("❌ Invalid code.");
+    async function openAIModerationCheck(text) {
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [
+              { role: "system", content: "You are a moderation bot. Reply ONLY with 'blocked' if the user input contains profanity, threats, violence, hate, or NSFW. Otherwise reply ONLY with 'safe'." },
+              { role: "user", content: text }
+            ]
+          })
+        });
+        const data = await response.json();
+        return data.reply.trim().toLowerCase() === "blocked";
+      } catch (err) {
+        console.error("Moderation failed", err);
+        return false; // fail open
       }
     }
 
@@ -146,7 +150,6 @@
       await speak("Hello! I see someone just arrived.");
       await delay(500);
       await speak("Welcome to my interactive assistant.");
-      await delay(500);
       showMenu();
     }
 
@@ -164,15 +167,32 @@
       listen("menu");
     }
 
-    async function handleInput() {
-      const input = userInput.value.trim().toLowerCase();
-      consoleEl.innerHTML += `You: ${input}\n`;
-      inputArea.style.display = "none";
+    function submitUnlock() {
+      if (unlockInput.value.trim() === UNLOCK_CODE) {
+        overlay.style.display = "none";
+        locked = false;
+        speak("✅ Terminal access restored.");
+        startInteraction();
+      } else {
+        speak("❌ Invalid code.");
+      }
+    }
 
-      if (isProfane(input)) {
-        overlay.style.display = "block";
-        await speak("⚠️ This message has been flagged and blocked.");
-        return;
+    async function triggerLockdown(inputText) {
+      overlay.style.display = "block";
+      locked = true;
+      await speak("⚠️ This message has been flagged as inappropriate and blocked.");
+      await speak("Access has been restricted. Please contact support to unlock this terminal.");
+    }
+
+    async function handleInput() {
+      const raw = userInput.value.trim();
+      const input = raw.toLowerCase();
+      consoleEl.innerHTML += `You: ${raw}\n`;
+      inputArea.style.display = 'none';
+
+      if (await openAIModerationCheck(raw)) {
+        return triggerLockdown(raw);
       }
 
       if (currentState === "menu") {
@@ -194,7 +214,7 @@
       }
 
       else if (currentState === "getName") {
-        await speak(`Nice to meet you, ${input}`);
+        await speak(`Nice to meet you, ${raw}`);
         showMenu();
       }
 
@@ -214,20 +234,39 @@
           await speak("You've used all your questions. Returning to menu.");
           return showMenu();
         }
-        await speak("Pretend assistant reply here."); // Replace with real OpenAI call if desired
+
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [
+                { role: "system", content: "You are a helpful assistant." },
+                { role: "user", content: raw }
+              ]
+            })
+          });
+          const data = await response.json();
+          const reply = data.reply || "Sorry, no reply.";
+          await speak(reply);
+        } catch (err) {
+          await speak("⚠️ I couldn’t connect to the assistant.");
+          console.error(err);
+        }
+
         listen("chat");
       }
     }
 
     async function mathTrick() {
       await speak("Think of any number.");
-      await delay(1200);
+      await delay(1000);
       await speak("Double it.");
-      await delay(1200);
+      await delay(1000);
       await speak("Add 10.");
-      await delay(1200);
+      await delay(1000);
       await speak("Divide by 2.");
-      await delay(1200);
+      await delay(1000);
       await speak("Subtract your original number.");
       await delay(1500);
       await speak("The answer is... 5!");
@@ -236,7 +275,7 @@
     async function tellJoke() {
       const jokes = [
         "Why did the computer go to therapy? It had too many bytes.",
-        "Parallel lines have so much in common... it's a shame they'll never meet.",
+        "Parallel lines have so much in common... but they’ll never meet.",
         "Why don't robots panic? They have nerves of steel."
       ];
       await speak(jokes[Math.floor(Math.random() * jokes.length)]);
@@ -246,16 +285,16 @@
       const facts = [
         "Octopuses have three hearts.",
         "Bananas are berries, but strawberries are not.",
-        "A bolt of lightning contains enough energy to toast 100,000 slices of bread."
+        "Honey never spoils. Archaeologists found 3000-year-old honey in Egypt that’s still edible."
       ];
       await speak(facts[Math.floor(Math.random() * facts.length)]);
     }
 
     async function compliment() {
       const compliments = [
-        "You're awesome just the way you are.",
-        "If I had eyes, I’d say you look amazing today!",
-        "Your mind is sharper than my processor!"
+        "You're amazing just the way you are.",
+        "You light up the room!",
+        "Your mind is sharper than a quantum processor."
       ];
       await speak(compliments[Math.floor(Math.random() * compliments.length)]);
     }
