@@ -1,3 +1,5 @@
+import fetch from 'node-fetch'; // ADD THIS if not using Node 18+
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -28,8 +30,13 @@ export default async function handler(req, res) {
     });
 
     const data = await openaiRes.json();
+
     if (data.error) {
       return res.status(500).json({ error: data.error.message });
+    }
+
+    if (!data.choices || !data.choices.length || !data.choices[0].message) {
+      return res.status(500).json({ error: 'No reply from OpenAI' });
     }
 
     return res.status(200).json({ reply: data.choices[0].message.content.trim() });
