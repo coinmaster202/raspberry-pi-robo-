@@ -92,7 +92,7 @@
       "10": "10. Exit"
     };
 
-    const displayOrder = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+    const displayOrder = Object.keys(optionMap);
 
     let currentState = null;
     let asked = new Set();
@@ -138,7 +138,7 @@
         return data.reply.trim().toLowerCase() === "blocked";
       } catch (err) {
         console.error("Moderation failed", err);
-        return false; // fail open
+        return false;
       }
     }
 
