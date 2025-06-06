@@ -16,6 +16,7 @@
       min-height: 300px;
       border-radius: 10px;
       white-space: pre-wrap;
+      overflow-y: auto;
     }
     input, button {
       margin-top: 10px;
@@ -58,10 +59,11 @@
     <button onclick="handleInput()">Submit</button>
   </div>
 
+  <!-- Lock overlay when profanity/flagged content is detected -->
   <div id="overlay">
     <div id="overlay-content">
       <h2>🚨 Terminal Locked</h2>
-      <p>This message has been flagged as inappropriate and blocked!.</p>
+      <p>This message has been flagged as inappropriate and blocked!</p>
       <p>Access has been restricted. Please contact support to unlock this terminal.</p>
       <p>Enter unlock code to continue:</p>
       <input id="unlock-code" type="text" placeholder="Enter code here" onkeydown="if(event.key==='Enter'){submitUnlock()}" />
@@ -72,6 +74,10 @@
   </div>
 
   <script>
+    // ─────────────────────────────────────────────────────────────
+    //  FRONT-END LOGIC (index.html)
+    // ─────────────────────────────────────────────────────────────
+
     const consoleEl = document.getElementById('console');
     const inputArea = document.getElementById('input-area');
     const userInput = document.getElementById('user-input');
@@ -90,9 +96,9 @@
       "9": "9. Surprise me",
       "10": "10. Exit"
     };
-
     const displayOrder = Object.keys(optionMap);
     const UNLOCK_CODE = "2026";
+
     let currentState = null;
     let asked = new Set();
     let locked = false;
@@ -131,7 +137,8 @@
         const result = await res.json();
         return result.flagged;
       } catch {
-        return false;
+        // If moderation fails (network error), let’s err on the side of caution
+        return true;
       }
     }
 
@@ -146,18 +153,20 @@
       }
     }
 
+    // Entry point for “Simulate Motion Detected”
     async function startInteraction() {
       if (locked) return;
       consoleEl.innerHTML = '';
       asked.clear();
       chatCount = 0;
-      await speak("Hello I see someone just arrived.");
+      await speak("Hello, I see someone just arrived.");
       await delay(500);
       await speak("Welcome to my interactive assistant.");
       await delay(500);
       showMenu();
     }
 
+    // Display the main menu
     async function showMenu() {
       const remaining = displayOrder.filter(opt => !asked.has(opt));
       if (remaining.length === 0) {
@@ -172,76 +181,140 @@
       listen("menu");
     }
 
+    // Handle user input in all states
     async function handleInput() {
-      const input = userInput.value.trim().toLowerCase();
-      consoleEl.innerHTML += `You: ${input}\n`;
+      const raw = userInput.value.trim();
+      const input = raw.toLowerCase();
+      consoleEl.innerHTML += `You: ${raw}\n`;
       inputArea.style.display = "none";
 
-      const flagged = await checkProfanity(input);
+      // 1) Check profanity/security for every single user message
+      const flagged = await checkProfanity(raw);
       if (flagged) {
+        locked = true;
         overlay.style.display = "block";
         await speak("⚠️ This message has been flagged and blocked.");
         return;
       }
 
+      // 2) Handle each state
       if (currentState === "menu") {
         if (!optionMap[input] || asked.has(input)) {
           await speak("That option is not available.");
           return showMenu();
         }
         asked.add(input);
-        if (input === "1") { await speak("What is your name?"); listen("getName"); }
-        else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
-        else if (input === "3") { await mathTrick(); showMenu(); }
-        else if (input === "4") { chatCount = 0; await speak("Ask anything. You have 5 questions."); listen("chat"); }
-        else if (input === "5") { await tellJoke(); showMenu(); }
-        else if (input === "6") { await tellFact(); showMenu(); }
-        else if (input === "7") { await speak("Do you like TikTok?"); listen("guessAge"); }
-        else if (input === "8") { await compliment(); showMenu(); }
-        else if (input === "9") { await speak("🎉 Surprise! You're amazing. Keep shining!"); showMenu(); }
-        else if (input === "10") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 3000); }
+        switch (input) {
+          case "1":
+            await speak("What is your name?");
+            listen("getName");
+            break;
+          case "2":
+            await speak("How are you feeling today?");
+            listen("getMood");
+            break;
+          case "3":
+            await mathTrick();
+            showMenu();
+            break;
+          case "4":
+            chatCount = 0;
+            await speak("Ask anything. You have 5 questions.");
+            listen("chat");
+            break;
+          case "5":
+            await tellJoke();
+            showMenu();
+            break;
+          case "6":
+            await tellFact();
+            showMenu();
+            break;
+          case "7":
+            await speak("Do you like TikTok?");
+            listen("guessAge");
+            break;
+          case "8":
+            await compliment();
+            showMenu();
+            break;
+          case "9":
+            await speak("🎉 Surprise! You're amazing. Keep shining!");
+            showMenu();
+            break;
+          case "10":
+            await speak("Goodbye! Restarting soon...");
+            setTimeout(startInteraction, 3000);
+            break;
+        }
       }
-
       else if (currentState === "getName") {
-        await speak(`Nice to meet you, ${input}`);
+        await speak(`Nice to meet you, ${raw}`);
         showMenu();
       }
-
       else if (currentState === "getMood") {
         await speak("Thanks for sharing.");
         showMenu();
       }
-
       else if (currentState === "guessAge") {
-        await speak(input.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
+        await speak(raw.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
         showMenu();
       }
 
+      // ───────────── “ChatGPT mode” ─────────────
       else if (currentState === "chat") {
         chatCount++;
         if (chatCount > 5) {
           await speak("You've used all your questions. Returning to menu.");
           return showMenu();
         }
+
+        // Build the messages array (system + user)
+        const messages = [
+          { role: "system", content: "You are a helpful assistant." },
+          { role: "user", content: raw }
+        ];
+
         try {
+          // 3) Call our /api/chat endpoint
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: [
-                { role: 'system', content: 'You are a helpful assistant.' },
-                { role: 'user', content: input }
-              ]
-            })
+            body: JSON.stringify({ messages })
           });
           const data = await res.json();
-          await speak(data.reply || "Sorry, no response received.");
+
+          if (res.status === 403) {
+            // If the chat endpoint says “flagged,” lock the UI
+            locked = true;
+            overlay.style.display = "block";
+            await speak("⚠️ Your last message was blocked due to policy violation.");
+            return;
+          }
+          if (res.status !== 200 || !data.reply) {
+            throw new Error("Invalid response from chat endpoint");
+          }
+
+          // 4) Speak the assistant’s reply
+          await speak(data.reply);
         } catch (e) {
+          console.error("Chat fetch error:", e);
           await speak("Sorry, there was an error.");
         }
-        listen("chat");
+
+        // 5) Prompt for the next chat question (unless we've reached 5)
+        if (!locked && chatCount < 5) {
+          listen("chat");
+        } else if (chatCount >= 5) {
+          await speak("You've reached 5 questions. Returning to menu shortly.");
+          showMenu();
+        }
       }
     }
+
+    // ─────────────────────────────────────────────────────────────
+    //  OTHER UTILITY FUNCTIONS (unchanged)
+    // ─────────────────────────────────────────────────────────────
 
     async function mathTrick() {
       await speak("Think of any number.");
