@@ -1,50 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Secure Motion Assistant</title>
+  <meta charset="UTF-8">
+  <title>🔐 Secure Motion Assistant</title>
   <style>
     body {
-      background: #000;
+      background: black;
       color: lime;
       font-family: monospace;
       padding: 20px;
     }
     #console {
       background: #111;
-      padding: 15px;
-      min-height: 300px;
+      padding: 20px;
       border-radius: 10px;
       white-space: pre-wrap;
+      margin-bottom: 10px;
     }
-    input, button {
-      margin-top: 10px;
-      padding: 10px;
+    #input-area input, button {
       font-size: 16px;
+      padding: 10px;
     }
-    #overlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.9);
-      z-index: 999;
-      color: white;
-      text-align: center;
-      padding-top: 100px;
-    }
-    #overlay-content {
-      display: inline-block;
-      background: #300;
-      border: 2px solid red;
-      padding: 30px;
-      border-radius: 15px;
-      font-size: 18px;
-    }
-    #overlay input {
-      padding: 8px;
+    #input-area {
       margin-top: 10px;
-      width: 200px;
-      text-align: center;
+    }
+    h1 {
+      color: lime;
     }
   </style>
 </head>
@@ -58,61 +39,36 @@
     <button onclick="handleInput()">Submit</button>
   </div>
 
-  <div id="overlay">
-    <div id="overlay-content">
-      <h2>🚨 Terminal Locked</h2>
-      <p>This message has been flagged as inappropriate and blocked.</p>
-      <p>Access has been restricted. Please contact support to unlock this terminal.</p>
-      <p>Enter unlock code to continue:</p>
-      <input id="unlock-code" type="text" placeholder="Enter code here" onkeydown="if(event.key==='Enter'){submitUnlock()}" />
-      <br>
-      <button onclick="submitUnlock()">Unlock</button>
-    </div>
-    <audio id="siren" src="https://www.soundjay.com/misc/sounds/siren-noise-01.mp3" autoplay loop></audio>
-  </div>
-
   <script>
     const consoleEl = document.getElementById('console');
     const inputArea = document.getElementById('input-area');
     const userInput = document.getElementById('user-input');
-    const overlay = document.getElementById('overlay');
-    const unlockInput = document.getElementById('unlock-code');
-    const UNLOCK_CODE = "2026";
-
-    const optionMap = {
-      "1": "1. What is your name?",
-      "2": "2. How are you?",
-      "3": "3. Try a math trick",
-      "4": "4. Ask anything (ChatGPT mode)",
-      "5": "5. Tell me a joke",
-      "6": "6. Fun fact of the day",
-      "7": "7. Guess my age",
-      "8": "8. Compliment me",
-      "9": "9. Surprise me",
-      "10": "10. Exit"
-    };
-
-    const displayOrder = Object.keys(optionMap);
 
     let currentState = null;
     let asked = new Set();
-    let locked = false;
+    let chatMessages = [];
     let chatCount = 0;
 
-    function delay(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
-    }
+    const options = [
+      { key: "1", text: "What is your name?", state: "getName" },
+      { key: "2", text: "How are you?", state: "getMood" },
+      { key: "3", text: "Try a math trick", state: "mathTrick" },
+      { key: "4", text: "Ask anything (ChatGPT mode)", state: "chatMode" },
+      { key: "5", text: "Tell me a joke", state: "joke" },
+      { key: "6", text: "Fun fact of the day", state: "fact" },
+      { key: "7", text: "Guess my age", state: "guessAge" },
+      { key: "8", text: "Compliment me", state: "compliment" },
+      { key: "9", text: "Surprise me", state: "surprise" },
+      { key: "10", text: "Exit", state: "exit" }
+    ];
 
-    async function speak(text) {
+    function speak(text) {
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'en-US';
+      msg.rate = 1;
+      speechSynthesis.speak(msg);
       consoleEl.innerHTML += `🤖: ${text}\n`;
       consoleEl.scrollTop = consoleEl.scrollHeight;
-      return new Promise(resolve => {
-        const msg = new SpeechSynthesisUtterance(text);
-        msg.lang = "en-US";
-        msg.rate = 1;
-        msg.onend = resolve;
-        speechSynthesis.speak(msg);
-      });
     }
 
     function listen(state) {
@@ -122,186 +78,133 @@
       userInput.focus();
     }
 
-    async function openAIModerationCheck(text) {
-      try {
-        const response = await fetch('/api/chat.js', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: [
-              { role: "system", content: "You are a moderation bot. Reply ONLY with 'blocked' if the user input contains profanity, threats, violence, hate, or NSFW. Otherwise reply ONLY with 'safe'." },
-              { role: "user", content: text }
-            ]
-          })
-        });
-        const data = await response.json();
-        return data.reply.trim().toLowerCase() === "blocked";
-      } catch (err) {
-        console.error("Moderation failed", err);
-        return false;
-      }
-    }
-
     async function startInteraction() {
-      if (locked) return;
-      consoleEl.innerHTML = '';
+      consoleEl.innerHTML = "";
       asked.clear();
+      chatMessages = [];
       chatCount = 0;
-      await speak("Hello! I see someone just arrived.");
-      await delay(500);
-      await speak("Welcome to my interactive assistant.");
-      showMenu();
+      speak("Hello! I see someone just arrived.");
+      await showMenu();
     }
 
     async function showMenu() {
-      const remaining = displayOrder.filter(opt => !asked.has(opt));
-      if (remaining.length === 0) {
-        await speak("You've completed all options. Restarting soon.");
-        return setTimeout(startInteraction, 3000);
-      }
-      await speak("Please choose one of the following options:");
-      for (let opt of remaining) {
-        await speak(optionMap[opt]);
-        await delay(200);
+      speak("Please choose one of the following options:");
+      for (const opt of options) {
+        if (!asked.has(opt.key)) {
+          speak(`${opt.key}. ${opt.text}`);
+        }
       }
       listen("menu");
-    }
-
-    function submitUnlock() {
-      if (unlockInput.value.trim() === UNLOCK_CODE) {
-        overlay.style.display = "none";
-        locked = false;
-        speak("✅ Terminal access restored.");
-        startInteraction();
-      } else {
-        speak("❌ Invalid code.");
-      }
-    }
-
-    async function triggerLockdown(inputText) {
-      overlay.style.display = "block";
-      locked = true;
-      await speak("⚠️ This message has been flagged as inappropriate and blocked.");
-      await speak("Access has been restricted. Please contact support to unlock this terminal.");
     }
 
     async function handleInput() {
       const raw = userInput.value.trim();
       const input = raw.toLowerCase();
-      consoleEl.innerHTML += `You: ${raw}\n`;
       inputArea.style.display = 'none';
-
-      if (await openAIModerationCheck(raw)) {
-        return triggerLockdown(raw);
-      }
+      consoleEl.innerHTML += `You: ${raw}\n`;
 
       if (currentState === "menu") {
-        if (!optionMap[input] || asked.has(input)) {
-          await speak("That option is not available.");
+        const selected = options.find(opt => opt.key === input);
+        if (!selected || asked.has(selected.key)) {
+          speak("That option is not available or already used.");
           return showMenu();
         }
-        asked.add(input);
-        if (input === "1") { await speak("What is your name?"); listen("getName"); }
-        else if (input === "2") { await speak("How are you feeling today?"); listen("getMood"); }
-        else if (input === "3") { await mathTrick(); showMenu(); }
-        else if (input === "4") { chatCount = 0; await speak("Ask anything. You have 5 questions."); listen("chat"); }
-        else if (input === "5") { await tellJoke(); showMenu(); }
-        else if (input === "6") { await tellFact(); showMenu(); }
-        else if (input === "7") { await speak("Do you like TikTok?"); listen("guessAge"); }
-        else if (input === "8") { await compliment(); showMenu(); }
-        else if (input === "9") { await speak("🎉 Surprise! You're amazing. Keep shining!"); showMenu(); }
-        else if (input === "10") { await speak("Goodbye! Restarting soon..."); setTimeout(startInteraction, 3000); }
+
+        asked.add(selected.key);
+        if (selected.state === "getName") {
+          speak("What is your name?");
+          listen("getName");
+        } else if (selected.state === "getMood") {
+          speak("How are you feeling today?");
+          listen("getMood");
+        } else if (selected.state === "mathTrick") {
+          await mathTrick(); showMenu();
+        } else if (selected.state === "chatMode") {
+          chatMessages = [{ role: "system", content: "You are a helpful assistant." }];
+          chatCount = 0;
+          speak("Ask anything. You have 5 questions.");
+          listen("chatMode");
+        } else if (selected.state === "joke") {
+          speak("Why did the scarecrow win an award? Because he was outstanding in his field!");
+          showMenu();
+        } else if (selected.state === "fact") {
+          speak("Did you know honey never spoils? Archaeologists found 3,000-year-old honey in Egyptian tombs that's still edible.");
+          showMenu();
+        } else if (selected.state === "guessAge") {
+          speak("Hmm... I'm guessing you're 21. Just a lucky guess!");
+          showMenu();
+        } else if (selected.state === "compliment") {
+          speak("You're doing amazing. Keep it up!");
+          showMenu();
+        } else if (selected.state === "surprise") {
+          speak("🎉 You just unlocked a secret! Surprise!");
+          showMenu();
+        } else if (selected.state === "exit") {
+          speak("Goodbye! Restarting soon...");
+          setTimeout(startInteraction, 5000);
+        }
       }
 
       else if (currentState === "getName") {
-        await speak(`Nice to meet you, ${raw}`);
+        speak(`Nice to meet you, ${raw}!`);
         showMenu();
       }
 
       else if (currentState === "getMood") {
-        await speak("Thanks for sharing.");
+        speak(`Thanks for sharing that with me.`);
         showMenu();
       }
 
-      else if (currentState === "guessAge") {
-        await speak(input.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
-        showMenu();
-      }
-
-      else if (currentState === "chat") {
-        chatCount++;
-        if (chatCount > 5) {
-          await speak("You've used all your questions. Returning to menu.");
-          return showMenu();
-        }
+      else if (currentState === "chatMode") {
+        chatMessages.push({ role: "user", content: raw });
 
         try {
-          const response = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messages: [
-                { role: "system", content: "You are a helpful assistant." },
-                { role: "user", content: raw }
-              ]
-            })
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: chatMessages })
           });
           const data = await response.json();
-          const reply = data.reply || "Sorry, no reply.";
-          await speak(reply);
-        } catch (err) {
-          await speak("⚠️ I couldn’t connect to the assistant.");
-          console.error(err);
+          const reply = data.reply || "⚠️ Assistant failed to reply.";
+          chatMessages.push({ role: "assistant", content: reply });
+          speak(reply);
+        } catch (e) {
+          console.error(e);
+          speak("Sorry, I couldn't connect to the assistant.");
         }
 
-        listen("chat");
+        chatCount++;
+        if (chatCount >= 5) {
+          speak("That was your last question. Returning to menu...");
+          showMenu();
+        } else {
+          listen("chatMode");
+        }
       }
     }
 
     async function mathTrick() {
-      await speak("Think of any number.");
+      speak("Let's do a fun mind trick.");
       await delay(1000);
-      await speak("Double it.");
-      await delay(1000);
-      await speak("Add 10.");
-      await delay(1000);
-      await speak("Divide by 2.");
-      await delay(1000);
-      await speak("Subtract your original number.");
-      await delay(1500);
-      await speak("The answer is... 5!");
+      speak("Think of any number.");
+      await delay(1300);
+      speak("Double it.");
+      await delay(1300);
+      speak("Add 10.");
+      await delay(1300);
+      speak("Divide by 2.");
+      await delay(1300);
+      speak("Now subtract the number you started with.");
+      await delay(1300);
+      speak("The answer is... 5!");
     }
 
-    async function tellJoke() {
-      const jokes = [
-        "Why did the computer go to therapy? It had too many bytes.",
-        "Parallel lines have so much in common... but they’ll never meet.",
-        "Why don't robots panic? They have nerves of steel."
-      ];
-      await speak(jokes[Math.floor(Math.random() * jokes.length)]);
-    }
-
-    async function tellFact() {
-      const facts = [
-        "Octopuses have three hearts.",
-        "Bananas are berries, but strawberries are not.",
-        "Honey never spoils. Archaeologists found 3000-year-old honey in Egypt that’s still edible."
-      ];
-      await speak(facts[Math.floor(Math.random() * facts.length)]);
-    }
-
-    async function compliment() {
-      const compliments = [
-        "You're amazing just the way you are.",
-        "You light up the room!",
-        "Your mind is sharper than a quantum processor."
-      ];
-      await speak(compliments[Math.floor(Math.random() * compliments.length)]);
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     window.startInteraction = startInteraction;
     window.handleInput = handleInput;
-    window.submitUnlock = submitUnlock;
   </script>
 </body>
 </html>
