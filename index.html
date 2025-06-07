@@ -15,7 +15,6 @@
       min-height: 300px;
       border-radius: 10px;
       white-space: pre-wrap;
-      overflow-y: auto;
     }
     input, button {
       margin-top: 10px;
@@ -57,7 +56,7 @@
   </div>  <div id="overlay">
     <div id="overlay-content">
       <h2>🚨 Terminal Locked</h2>
-      <p>This message has been flagged as inappropriate and blocked!</p>
+      <p>This message has been flagged as inappropriate and blocked!.</p>
       <p>Access has been restricted. Please contact support to unlock this terminal.</p>
       <p>Enter unlock code to continue:</p>
       <input id="unlock-code" type="text" placeholder="Enter code here" onkeydown="if(event.key==='Enter'){submitUnlock()}" />
@@ -84,9 +83,9 @@
       "9": "9. Surprise me",
       "10": "10. Exit"
     };
+
     const displayOrder = Object.keys(optionMap);
     const UNLOCK_CODE = "2026";
-
     let currentState = null;
     let asked = new Set();
     let locked = false;
@@ -115,17 +114,6 @@
       userInput.focus();
     }
 
-    function submitUnlock() {
-      if (unlockInput.value.trim() === UNLOCK_CODE) {
-        overlay.style.display = "none";
-        locked = false;
-        speak("\u2705 Terminal access restored.");
-        startInteraction();
-      } else {
-        speak("\u274c Invalid code.");
-      }
-    }
-
     async function checkProfanity(text) {
       try {
         const res = await fetch('/api/moderate', {
@@ -140,85 +128,22 @@
       }
     }
 
-    async function handleInput() {
-      const raw = userInput.value.trim();
-      const input = raw.toLowerCase();
-      consoleEl.innerHTML += `You: ${raw}\n`;
-      inputArea.style.display = "none";
-
-      const flagged = await checkProfanity(raw);
-      if (flagged && !(currentState === "menu" && input === "4")) {
-        overlay.style.display = "block";
-        locked = true;
-        await speak("\u26a0\ufe0f This message has been flagged and blocked.");
-        return;
+    function submitUnlock() {
+      if (unlockInput.value.trim() === UNLOCK_CODE) {
+        overlay.style.display = "none";
+        locked = false;
+        speak("✅ Terminal access restored.");
+        startInteraction();
+      } else {
+        speak("❌ Invalid code.");
       }
-
-      if (currentState === "menu") {
-        if (!optionMap[input] || asked.has(input)) {
-          await speak("That option is not available.");
-          return showMenu();
-        }
-        asked.add(input);
-        if (input === "1") return speak("What is your name?").then(() => listen("getName"));
-        if (input === "2") return speak("How are you feeling today?").then(() => listen("getMood"));
-        if (input === "3") return mathTrick().then(showMenu);
-        if (input === "4") {
-          chatCount = 0;
-          await speak("Ask anything. You have 5 questions.");
-          return listen("chat");
-        }
-        if (input === "5") return tellJoke().then(showMenu);
-        if (input === "6") return tellFact().then(showMenu);
-        if (input === "7") return speak("Do you like TikTok?").then(() => listen("guessAge"));
-        if (input === "8") return compliment().then(showMenu);
-        if (input === "9") return speak("\ud83c\udf89 Surprise! You're amazing. Keep shining!").then(showMenu);
-        if (input === "10") return speak("Goodbye! Restarting soon...").then(() => setTimeout(startInteraction, 3000));
-      }
-
-      if (currentState === "getName") {
-        await speak(`Nice to meet you, ${raw}`);
-        return showMenu();
-      }
-
-      if (currentState === "getMood") {
-        await speak("Thanks for sharing.");
-        return showMenu();
-      }
-
-      if (currentState === "guessAge") {
-        await speak(raw.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
-        return showMenu();
-      }
-
-      if (currentState === "chat") {
-        chatCount++;
-        if (chatCount > 5) return speak("You've used all your questions. Returning to menu.").then(showMenu);
-        try {
-          const res = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: [
-                { role: 'system', content: 'You are a helpful assistant.' },
-                { role: 'user', content: raw }
-              ]
-            })
-          });
-          const data = await res.json();
-          await speak(data.reply || "Sorry, no response received.");
-        } catch {
-          await speak("Sorry, there was an error.");
-        }
-        return listen("chat");
-      }
-
-      await speak("I didn't understand that. Returning to menu.");
-      return showMenu();
     }
 
     async function startInteraction() {
-      if (locked) return;
+      if (locked) {
+        await speak("🚫 Terminal is locked. Please unlock to continue.");
+        return;
+      }
       consoleEl.innerHTML = '';
       asked.clear();
       chatCount = 0;
@@ -241,6 +166,108 @@
         await delay(200);
       }
       listen("menu");
+    }
+
+    async function handleInput() {
+      const input = userInput.value.trim().toLowerCase();
+      consoleEl.innerHTML += `You: ${input}\n`;
+      inputArea.style.display = "none";
+
+      const flagged = await checkProfanity(input);
+      if (!(currentState === "menu" && input === "4") && flagged) {
+        overlay.style.display = "block";
+        locked = true;
+        await speak("⚠️ This message has been flagged and blocked.");
+        return;
+      }
+
+      if (currentState === "menu") {
+        if (!optionMap[input] || asked.has(input)) {
+          await speak("That option is not available.");
+          return showMenu();
+        }
+        asked.add(input);
+        await speak(`You selected option ${input}: ${optionMap[input].replace(/^\d+\.\s*/, '')}`);
+
+        switch (input) {
+          case "1":
+            await speak("What is your name?");
+            listen("getName");
+            break;
+          case "2":
+            await speak("How are you feeling today?");
+            listen("getMood");
+            break;
+          case "3":
+            await mathTrick();
+            return showMenu();
+          case "4":
+            chatCount = 0;
+            await speak("Ask anything. You have 5 questions.");
+            listen("chat");
+            break;
+          case "5":
+            await tellJoke();
+            return showMenu();
+          case "6":
+            await tellFact();
+            return showMenu();
+          case "7":
+            await speak("Do you like TikTok?");
+            listen("guessAge");
+            break;
+          case "8":
+            await compliment();
+            return showMenu();
+          case "9":
+            await speak("🎉 Surprise! You're amazing. Keep shining!");
+            return showMenu();
+          case "10":
+            await speak("Goodbye! Restarting soon...");
+            return setTimeout(startInteraction, 3000);
+        }
+        return;
+      }
+
+      if (currentState === "getName") {
+        await speak(`Nice to meet you, ${input}`);
+        return showMenu();
+      }
+
+      if (currentState === "getMood") {
+        await speak("Thanks for sharing.");
+        return showMenu();
+      }
+
+      if (currentState === "guessAge") {
+        await speak(input.includes("yes") ? "Hmm... I’d guess you’re under 25!" : "You seem mature. Maybe 30+?");
+        return showMenu();
+      }
+
+      if (currentState === "chat") {
+        chatCount++;
+        if (chatCount > 5) {
+          await speak("You've used all your questions. Returning to menu.");
+          return showMenu();
+        }
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [
+                { role: 'system', content: 'You are a helpful assistant.' },
+                { role: 'user', content: input }
+              ]
+            })
+          });
+          const data = await res.json();
+          await speak(data.reply || "Sorry, no response received.");
+        } catch (e) {
+          await speak("Sorry, there was an error.");
+        }
+        listen("chat");
+      }
     }
 
     async function mathTrick() {
