@@ -5,6 +5,7 @@ const overlay = document.getElementById('overlay');
 const unlockInput = document.getElementById('unlock-code');
 const yesNoButtons = document.getElementById('yesno-buttons');
 const gotItArea = document.getElementById('got-it-area');
+const lockdownAudio = document.getElementById('lockdown-audio');
 
 const optionMap = {
   "1": "1. What is your name?",
@@ -33,6 +34,7 @@ function delay(ms) {
 }
 
 async function speak(text) {
+  if (locked) return; // Prevent speaking while locked
   consoleEl.innerHTML += `🤖: ${text}\n`;
   consoleEl.scrollTop = consoleEl.scrollHeight;
   return new Promise(resolve => {
@@ -108,6 +110,11 @@ function submitUnlock() {
     overlay.style.display = "none";
     locked = false;
     unlockInput.value = "";
+
+    // Stop audio
+    lockdownAudio.pause();
+    lockdownAudio.currentTime = 0;
+
     speak("✅ Terminal access restored.");
     startInteraction();
   } else {
@@ -149,12 +156,17 @@ async function handleInput() {
   inputArea.style.display = "none";
   hideYesNo();
 
-  // Global profanity check
   const flagged = await checkProfanity(input);
   if (flagged) {
     overlay.style.display = "block";
     locked = true;
     unlockInput.value = "";
+
+    // Stop any speech in progress and play audio
+    speechSynthesis.cancel();
+    lockdownAudio.currentTime = 0;
+    lockdownAudio.play();
+
     await speak("🚨 Terminal locked. This message has been flagged as inappropriate and blocked. Access has been restricted.");
     return;
   }
@@ -208,6 +220,11 @@ async function handleInput() {
       overlay.style.display = "block";
       locked = true;
       unlockInput.value = "";
+
+      speechSynthesis.cancel();
+      lockdownAudio.currentTime = 0;
+      lockdownAudio.play();
+
       await speak("🚨 Terminal locked due to unsafe language during chat. Access is restricted.");
       return;
     }
