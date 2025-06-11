@@ -49,8 +49,6 @@ function listen(state) {
   inputArea.style.display = 'block';
   userInput.value = '';
   userInput.focus();
-
-  // Toggle Yes/No buttons for specific states
   if (["guessAge", "getMood"].includes(state)) {
     showYesNo();
   } else {
@@ -151,10 +149,9 @@ async function handleInput() {
   inputArea.style.display = "none";
   hideYesNo();
 
+  // Global profanity check
   const flagged = await checkProfanity(input);
-  const isChatAllowed = currentState === "menu" && input === "4";
-
-  if (!isChatAllowed && flagged) {
+  if (flagged) {
     overlay.style.display = "block";
     locked = true;
     unlockInput.value = "";
@@ -205,6 +202,7 @@ async function handleInput() {
       await speak("You've used all your questions. Returning to menu.");
       return showMenu();
     }
+
     const flaggedChat = await checkProfanity(input);
     if (flaggedChat) {
       overlay.style.display = "block";
@@ -213,6 +211,7 @@ async function handleInput() {
       await speak("🚨 Terminal locked due to unsafe language during chat. Access is restricted.");
       return;
     }
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
