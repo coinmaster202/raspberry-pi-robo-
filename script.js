@@ -34,15 +34,14 @@ function delay(ms) {
 }
 
 async function speak(text) {
-  if (locked) return; // Prevent speaking while locked
+  if (locked) return;
   consoleEl.innerHTML += `🤖: ${text}\n`;
   consoleEl.scrollTop = consoleEl.scrollHeight;
-  return new Promise(resolve => {
-    const msg = new SpeechSynthesisUtterance(text);
-    msg.lang = "en-US";
-    msg.rate = 1;
-    msg.onend = resolve;
-    speechSynthesis.speak(msg);
+
+  await fetch('/speak', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
   });
 }
 
@@ -92,17 +91,8 @@ function continueMathTrick() {
 }
 
 async function checkProfanity(text) {
-  try {
-    const res = await fetch('/api/moderate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: text })
-    });
-    const result = await res.json();
-    return result.flagged;
-  } catch {
-    return false;
-  }
+  const badWords = ["fuck", "shit", "bitch", "cunt"]; // basic offline check
+  return badWords.some(word => text.includes(word));
 }
 
 function submitUnlock() {
@@ -110,11 +100,8 @@ function submitUnlock() {
     overlay.style.display = "none";
     locked = false;
     unlockInput.value = "";
-
-    // Stop audio
     lockdownAudio.pause();
     lockdownAudio.currentTime = 0;
-
     speak("✅ Terminal access restored.");
     startInteraction();
   } else {
@@ -156,17 +143,12 @@ async function handleInput() {
   inputArea.style.display = "none";
   hideYesNo();
 
-  const flagged = await checkProfanity(input);
-  if (flagged) {
+  if (await checkProfanity(input)) {
     overlay.style.display = "block";
     locked = true;
     unlockInput.value = "";
-
-    // Stop any speech in progress and play audio
-    speechSynthesis.cancel();
     lockdownAudio.currentTime = 0;
     lockdownAudio.play();
-
     await speak("🚨 Terminal locked. This message has been flagged as inappropriate and blocked. Access has been restricted.");
     return;
   }
@@ -177,12 +159,12 @@ async function handleInput() {
       return showMenu();
     }
     asked.add(input);
-    await speak(`You selected option ${input}: ${optionMap[input].replace(/\\d+\\.\\s*/, '')}`);
+    await speak(`You selected option ${input}: ${optionMap[input].replace(/^\d+\.\s*/, '')}`);
 
     switch (input) {
       case "1": await speak("What is your name?"); listen("getName"); break;
       case "2": await speak("How are you feeling today?"); listen("getMood"); break;
-      case "3": return mathTrick(); // uses Got it flow
+      case "3": return mathTrick();
       case "4": chatCount = 0; await speak("Ask anything. You have 5 questions."); listen("chat"); break;
       case "5": await tellJoke(); return showMenu();
       case "6": await tellFact(); return showMenu();
@@ -215,36 +197,7 @@ async function handleInput() {
       return showMenu();
     }
 
-    const flaggedChat = await checkProfanity(input);
-    if (flaggedChat) {
-      overlay.style.display = "block";
-      locked = true;
-      unlockInput.value = "";
-
-      speechSynthesis.cancel();
-      lockdownAudio.currentTime = 0;
-      lockdownAudio.play();
-
-      await speak("🚨 Terminal locked due to unsafe language during chat. Access is restricted.");
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            { role: 'system', content: 'You are a helpful assistant.' },
-            { role: 'user', content: input }
-          ]
-        })
-      });
-      const data = await res.json();
-      await speak(data.reply || "Sorry, no response received.");
-    } catch {
-      await speak("Sorry, there was an error.");
-    }
+    await speak("Sorry, offline assistant can't respond to that now.");
     listen("chat");
   }
 }
@@ -298,7 +251,7 @@ document.addEventListener('keydown', function (e) {
   e.preventDefault();
 });
 
-// Global bindings
+// Bind globally
 window.startInteraction = startInteraction;
 window.handleInput = handleInput;
 window.submitUnlock = submitUnlock;
