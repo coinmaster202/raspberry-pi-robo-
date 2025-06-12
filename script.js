@@ -38,10 +38,12 @@ async function speak(text) {
   consoleEl.innerHTML += `🤖: ${text}\n`;
   consoleEl.scrollTop = consoleEl.scrollHeight;
 
-  await fetch('/speak', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text })
+  return new Promise(resolve => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 1;
+    utterance.onend = resolve;
+    speechSynthesis.speak(utterance);
   });
 }
 
@@ -91,8 +93,13 @@ function continueMathTrick() {
 }
 
 async function checkProfanity(text) {
-  const badWords = ["fuck", "shit", "bitch", "cunt"]; // basic offline check
-  return badWords.some(word => text.includes(word));
+  const res = await fetch('/api/moderate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input: text })
+  });
+  const result = await res.json();
+  return result.flagged;
 }
 
 function submitUnlock() {
@@ -197,7 +204,22 @@ async function handleInput() {
       return showMenu();
     }
 
-    await speak("Sorry, offline assistant can't respond to that now.");
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: input }
+          ]
+        })
+      });
+      const data = await res.json();
+      await speak(data.reply || "Sorry, no response received.");
+    } catch {
+      await speak("Sorry, there was an error.");
+    }
     listen("chat");
   }
 }
@@ -242,7 +264,6 @@ async function compliment() {
   await speak(compliments[Math.floor(Math.random() * compliments.length)]);
 }
 
-// Lock keyboard input when terminal is locked
 document.addEventListener('keydown', function (e) {
   if (!locked) return;
   const isUnlock = document.activeElement === unlockInput;
